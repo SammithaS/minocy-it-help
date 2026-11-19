@@ -43,7 +43,7 @@ export function TicketDraftCard({
 
   return (
     <div className="max-w-[94%] rounded-2xl border-2 border-sun bg-card p-4" aria-label="Ticket draft">
-      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#8A5300] dark:text-sun">
+      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-brand-800">
         <Ticket className="size-4" /> Ticket draft · check before sending
       </p>
 
@@ -119,7 +119,7 @@ export function TicketDraftCard({
           type="button"
           onClick={approve}
           disabled={busy || saving || title.trim().length < 5 || summary.trim().length < 10}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-sun px-5 text-sm font-bold text-[#17262A] hover:bg-[#f5a62e] disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-sun px-5 text-sm font-bold text-[#0F1B2D] hover:bg-sun-hover disabled:opacity-50"
         >
           {saving && <Loader2 className="size-4 animate-spin" />} Raise ticket &amp; notify IT
         </button>

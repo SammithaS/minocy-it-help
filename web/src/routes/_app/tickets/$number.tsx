@@ -178,7 +178,7 @@ function TicketPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             {staff ? (
               <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
-                <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} className="size-4 accent-[#0B6E76]" />
+                <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} className="size-4 accent-[#1D4ED8]" />
                 Internal note (IT only)
               </label>
             ) : (

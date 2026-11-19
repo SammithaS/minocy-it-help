@@ -59,17 +59,17 @@ export const searchQuery = (q: string) =>
     staleTime: 60_000,
   });
 
-/** Icon + Option B tile colours per article category. */
+/** Icon + Clear Sky tile colours per article category. */
 export const categoryStyle: Record<string, { icon: LucideIcon; bg: string; fg: string }> = {
-  Network: { icon: Wifi, bg: "#E3F2F1", fg: "#08555B" },
-  Accounts: { icon: KeyRound, bg: "#FFE3B3", fg: "#7A4A00" },
+  Network: { icon: Wifi, bg: "#E0F2FE", fg: "#0369A1" },
+  Accounts: { icon: KeyRound, bg: "#E8EFFD", fg: "#1D4ED8" },
   Security: { icon: ShieldAlert, bg: "#FEE2E2", fg: "#B91C1C" },
-  Email: { icon: Mail, bg: "#E6ECFF", fg: "#2B4AC2" },
-  Collaboration: { icon: Users, bg: "#E6ECFF", fg: "#2B4AC2" },
-  Software: { icon: AppWindow, bg: "#EDE7FB", fg: "#5B3DB5" },
-  Hardware: { icon: Monitor, bg: "#FDE4EC", fg: "#A3214E" },
-  Performance: { icon: Monitor, bg: "#FDE4EC", fg: "#A3214E" },
-  Printing: { icon: Monitor, bg: "#FDE4EC", fg: "#A3214E" },
+  Email: { icon: Mail, bg: "#EEF2FF", fg: "#4338CA" },
+  Collaboration: { icon: Users, bg: "#EEF2FF", fg: "#4338CA" },
+  Software: { icon: AppWindow, bg: "#ECFEFF", fg: "#0E7490" },
+  Hardware: { icon: Monitor, bg: "#F1F5F9", fg: "#334155" },
+  Performance: { icon: Monitor, bg: "#F1F5F9", fg: "#334155" },
+  Printing: { icon: Monitor, bg: "#F1F5F9", fg: "#334155" },
 };
 export const styleFor = (category: string) => categoryStyle[category] ?? categoryStyle.Software!;
 

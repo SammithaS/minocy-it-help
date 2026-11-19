@@ -1,15 +1,15 @@
 import { Body, Button, Container, Head, Heading, Hr, Html, Link, Preview, Section, Text } from "@react-email/components";
 
-/** Option B colours, inlined for email clients. */
+/** Clear Sky colours, inlined for email clients. */
 const C = {
-  brand: "#0B6E76",
-  brand50: "#E3F2F1",
-  brand800: "#08555B",
-  sun: "#FFB547",
-  ink: "#17262A",
-  muted: "#55666B",
-  line: "#E8EEED",
-  canvas: "#F3F6F5",
+  brand: "#1D4ED8",
+  brand50: "#E8EFFD",
+  brand800: "#1E40AF",
+  sun: "#38BDF8",
+  ink: "#0F1B2D",
+  muted: "#52607A",
+  line: "#E3E8F0",
+  canvas: "#F4F7FB",
   critical: "#B91C1C",
   criticalBg: "#FEE2E2",
 };
@@ -59,12 +59,12 @@ export function TicketEmail(p: TicketEmailProps) {
     <Html lang="en">
       <Head />
       <Preview>{p.preview}</Preview>
-      <Body style={{ background: C.canvas, fontFamily: "'Plus Jakarta Sans', Segoe UI, Arial, sans-serif", margin: 0, padding: "24px 0" }}>
+      <Body style={{ background: C.canvas, fontFamily: "Inter, 'Segoe UI', Arial, sans-serif", margin: 0, padding: "24px 0" }}>
         <Container style={{ maxWidth: "560px", margin: "0 auto", padding: "0 16px" }}>
-          <Section style={{ background: C.brand, borderRadius: "22px 22px 0 0", padding: "18px 24px" }}>
+          <Section style={{ background: C.brand, borderRadius: "16px 16px 0 0", padding: "18px 24px" }}>
             <Text style={{ color: "#FFFFFF", fontWeight: 800, fontSize: "16px", margin: 0 }}>Minocy IT Help</Text>
           </Section>
-          <Section style={{ background: "#FFFFFF", borderRadius: "0 0 22px 22px", padding: "24px", border: `1px solid ${C.line}`, borderTop: "none" }}>
+          <Section style={{ background: "#FFFFFF", borderRadius: "0 0 16px 16px", padding: "24px", border: `1px solid ${C.line}`, borderTop: "none" }}>
             {p.eyebrow && <Text style={{ color: C.brand800, fontSize: "12px", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", margin: "0 0 6px" }}>{p.eyebrow}</Text>}
             <Heading as="h1" style={{ color: C.ink, fontSize: "22px", lineHeight: "1.3", margin: "0 0 12px" }}>
               {p.heading}

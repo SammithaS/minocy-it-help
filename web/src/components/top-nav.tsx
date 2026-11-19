@@ -106,7 +106,7 @@ export function TopNav({ me }: { me: Me }) {
               <LogOut className="size-5" strokeWidth={2} />
             </button>
             <span
-              className="ml-1 grid size-10 place-items-center rounded-full bg-sun text-sm font-bold text-[#17262A]"
+              className="ml-1 grid size-10 place-items-center rounded-full bg-sun text-sm font-bold text-[#0F1B2D]"
               title={`${me.user.name} · ${me.user.role}`}
             >
               {initials(me.user.name)}

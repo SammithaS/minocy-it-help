@@ -17,13 +17,13 @@ const page = (title: string, body: ReturnType<typeof html> | string) => html`<!d
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>${title} · Minocy IT Help</title>
       <style>
-        body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #f3f6f5; font-family: "Plus Jakarta Sans", system-ui, sans-serif; color: #17262a; }
-        main { width: min(420px, calc(100vw - 32px)); background: #fff; border: 1px solid #e8eeed; border-radius: 22px; padding: 28px; }
-        h1 { font-size: 22px; margin: 0 0 8px; } p { color: #55666b; line-height: 1.5; }
+        body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #f4f7fb; font-family: Inter, system-ui, sans-serif; color: #0f1b2d; }
+        main { width: min(420px, calc(100vw - 32px)); background: #fff; border: 1px solid #e3e8f0; border-radius: 16px; padding: 28px; }
+        h1 { font-size: 22px; margin: 0 0 8px; } p { color: #52607a; line-height: 1.5; }
         button { min-height: 44px; border-radius: 999px; border: 0; padding: 0 20px; font-weight: 700; font-size: 15px; cursor: pointer; }
-        .yes { background: #0b6e76; color: #fff; } .no { background: #fff; border: 1px solid #cbd7d6; color: #17262a; }
-        textarea { width: 100%; box-sizing: border-box; min-height: 80px; border: 1px solid #cbd7d6; border-radius: 14px; padding: 10px; font: inherit; margin: 8px 0 12px; }
-        .row { display: flex; gap: 8px; flex-wrap: wrap; } a { color: #0b6e76; font-weight: 700; }
+        .yes { background: #1d4ed8; color: #fff; } .no { background: #fff; border: 1px solid #cbd5e1; color: #0f1b2d; }
+        textarea { width: 100%; box-sizing: border-box; min-height: 80px; border: 1px solid #cbd5e1; border-radius: 14px; padding: 10px; font: inherit; margin: 8px 0 12px; }
+        .row { display: flex; gap: 8px; flex-wrap: wrap; } a { color: #1d4ed8; font-weight: 700; }
       </style>
     </head>
     <body>

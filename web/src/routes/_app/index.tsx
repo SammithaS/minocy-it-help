@@ -11,12 +11,12 @@ export const Route = createFileRoute("/_app/")({
 });
 
 const tiles = [
-  { title: "Reset password", note: "Locked out or expired", icon: KeyRound, bg: "#FFE3B3", fg: "#7A4A00" },
-  { title: "Wi-Fi & VPN", note: "Dropping, slow, can't connect", icon: Wifi, bg: "#E3F2F1", fg: "#08555B" },
-  { title: "Email & calendar", note: "Outlook, sync, shared mailboxes", icon: Mail, bg: "#E6ECFF", fg: "#2B4AC2" },
-  { title: "Printers", note: "Jams, drivers, scan to email", icon: Printer, bg: "#FDE4EC", fg: "#A3214E" },
-  { title: "Software", note: "Install or fix an app", icon: AppWindow, bg: "#EDE7FB", fg: "#5B3DB5" },
-  { title: "Raise a ticket", note: "Talk to the IT team", icon: Ticket, bg: "#17262A", fg: "#FFFFFF" },
+  { title: "Reset password", note: "Locked out or expired", icon: KeyRound, bg: "#E8EFFD", fg: "#1D4ED8" },
+  { title: "Wi-Fi & VPN", note: "Dropping, slow, can't connect", icon: Wifi, bg: "#E0F2FE", fg: "#0369A1" },
+  { title: "Email & calendar", note: "Outlook, sync, shared mailboxes", icon: Mail, bg: "#EEF2FF", fg: "#4338CA" },
+  { title: "Printers", note: "Jams, drivers, scan to email", icon: Printer, bg: "#F1F5F9", fg: "#334155" },
+  { title: "Software", note: "Install or fix an app", icon: AppWindow, bg: "#ECFEFF", fg: "#0E7490" },
+  { title: "Raise a ticket", note: "Talk to the IT team", icon: Ticket, bg: "#0F1B2D", fg: "#FFFFFF" },
 ];
 
 function greeting() {
@@ -42,17 +42,17 @@ function Home() {
   return (
     <div className="space-y-8">
       <section className="relative overflow-hidden rounded-hero bg-hero px-6 py-10 text-white sm:px-10 sm:py-14">
-        <div aria-hidden className="absolute -top-16 -right-10 size-56 rounded-full bg-sun opacity-90" />
-        <div aria-hidden className="absolute -right-24 -bottom-28 size-72 rounded-full bg-brand-600 opacity-70" />
+        <div aria-hidden className="absolute -top-20 -right-14 size-64 rounded-full bg-brand-600" />
+        <div aria-hidden className="absolute right-28 -bottom-32 size-56 rounded-full bg-sun opacity-55" />
         <div className="relative max-w-2xl">
-          <p className="text-[15px] text-[#CDEDEA]">
+          <p className="text-[15px] text-hero-soft">
             {greeting()}, {first} 👋
           </p>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-[38px] sm:leading-tight">
             What&apos;s not working today?
           </h1>
           <form
-            className="mt-6 flex items-center gap-2 rounded-[18px] bg-white p-2 shadow-chat"
+            className="mt-6 flex items-center gap-2 rounded-[14px] bg-white p-2 shadow-chat"
             onSubmit={onAsk}
           >
             <label htmlFor="ask" className="sr-only">
@@ -63,12 +63,12 @@ function Home() {
               value={ask}
               onChange={(e) => setAsk(e.target.value)}
               placeholder="e.g. My Wi-Fi keeps dropping"
-              className="min-h-11 min-w-0 flex-1 bg-transparent px-3 text-[15px] text-[#17262A] placeholder:text-[#55666B] focus:outline-none"
+              className="min-h-11 min-w-0 flex-1 bg-transparent px-3 text-[15px] text-[#0F1B2D] placeholder:text-[#52607A] focus:outline-none"
             />
             <button
               type="submit"
               disabled={!ask.trim()}
-              className="min-h-11 rounded-full bg-[#17262A] px-5 text-sm font-bold text-white disabled:opacity-60"
+              className="min-h-11 rounded-full bg-ink-surface px-5 text-sm font-bold text-white disabled:opacity-60"
             >
               Ask
             </button>

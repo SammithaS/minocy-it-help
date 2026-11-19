@@ -2,69 +2,79 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Theme: "Clear Sky" — blue primary, sky accent, navy ink (chosen over the original teal Option B).
+ * Token names are kept from the original design (brand-*, sun) so components don't change:
+ *   brand-*  = the blue primary scale
+ *   sun      = the sky accent (assistant avatar, highlights) — always with dark text
+ */
 @theme {
-  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
 
-  --color-brand-700: #0B6E76;
-  --color-brand-800: #08555B;
-  --color-brand-600: #138A93;
-  --color-brand-50: #E3F2F1;
-  --color-sun: #FFB547;
-  --color-sun-50: #FFE3B3;
+  --color-brand-700: #1D4ED8;   /* primary: user bubbles, links, primary buttons, send */
+  --color-brand-800: #1E40AF;   /* hover, text on brand tint */
+  --color-brand-600: #3B82F6;   /* decorative circle */
+  --color-brand-50: #E8EFFD;    /* active nav pill, citation tags, tints */
+  --color-sun: #38BDF8;         /* sky accent: avatar, "Yes, raise a ticket" (dark text only) */
+  --color-sun-hover: #0EA5E9;
+  --color-sun-50: #E0F2FE;
 
-  --color-ink: #17262A;
-  --color-muted: #55666B;
-  --color-line: #E8EEED;
-  --color-control: #CBD7D6;
-  --color-canvas: #F3F6F5;
-  --color-chat-bg: #FAFBFB;
+  --color-ink: #0F1B2D;
+  --color-muted: #52607A;
+  --color-line: #E3E8F0;
+  --color-control: #CBD5E1;
+  --color-canvas: #F4F7FB;
+  --color-chat-bg: #F8FAFC;
   --color-card: #FFFFFF;
   /* surfaces that stay dark in both themes (chat header, dark buttons) */
-  --color-ink-surface: #17262A;
+  --color-ink-surface: #0F1B2D;
   /* text colour on brand-700 fills */
   --color-on-brand: #FFFFFF;
   /* hero fill (kept deep in dark mode so white text stays readable) */
-  --color-hero: #0B6E76;
+  --color-hero: #1D4ED8;
+  /* greeting text on the hero */
+  --color-hero-soft: #DBEAFE;
 
-  --color-new: #2B4AC2;
-  --color-new-bg: #E6ECFF;
-  --color-progress: #8A5300;
-  --color-progress-bg: #FFF1D6;
-  --color-resolved: #146C34;
-  --color-resolved-bg: #DCF5E4;
+  --color-new: #1E40AF;
+  --color-new-bg: #E8EFFD;
+  --color-progress: #92400E;
+  --color-progress-bg: #FEF3C7;
+  --color-resolved: #166534;
+  --color-resolved-bg: #DCFCE7;
   --color-critical: #B91C1C;
   --color-critical-bg: #FEE2E2;
 
-  --radius-hero: 28px;
-  --radius-card: 22px;
-  --radius-tile: 20px;
-  --shadow-chat: 0 16px 40px rgba(23, 38, 42, 0.10);
+  --radius-hero: 20px;
+  --radius-card: 16px;
+  --radius-tile: 16px;
+  --shadow-chat: 0 16px 40px rgba(15, 27, 45, 0.10);
 }
 
-/* Dark mode: re-point the semantic tokens. `ink` stays dark for chat header/dark buttons via --color-ink-surface. */
+/* Dark mode: re-point the semantic tokens. `ink-surface` stays dark for the chat header / dark buttons. */
 @layer base {
   .dark {
-    --color-canvas: #0E1517;
-    --color-card: #152024;
-    --color-chat-bg: #111b1e;
-    --color-line: #24353A;
-    --color-control: #33494F;
-    --color-ink: #E6EFEE;
-    --color-muted: #9DB0B3;
-    --color-brand-700: #2BB3BD;
-    --color-brand-800: #8FDCE1;
-    --color-brand-50: #12343A;
-    --color-new-bg: #1C2A5C;
-    --color-new: #AFC0FF;
-    --color-progress-bg: #3D2C0A;
-    --color-progress: #FFD38A;
-    --color-resolved-bg: #12361F;
-    --color-resolved: #8EE0AC;
-    --color-critical-bg: #44161A;
-    --color-critical: #FFA9A9;
-    --color-ink-surface: #0A1113;
-    --color-on-brand: #0E1517;
-    --color-hero: #0B4F55;
+    --color-canvas: #0B1220;
+    --color-card: #111A2E;
+    --color-chat-bg: #0E1628;
+    --color-line: #1F2A44;
+    --color-control: #334155;
+    --color-ink: #E5ECF6;
+    --color-muted: #94A3B8;
+    --color-brand-700: #60A5FA;
+    --color-brand-800: #BFDBFE;
+    --color-brand-50: #172554;
+    --color-sun-50: #0C2A3F;
+    --color-new-bg: #172554;
+    --color-new: #BFDBFE;
+    --color-progress-bg: #3B2A0A;
+    --color-progress: #FCD34D;
+    --color-resolved-bg: #0F2E1C;
+    --color-resolved: #86EFAC;
+    --color-critical-bg: #3F1518;
+    --color-critical: #FCA5A5;
+    --color-ink-surface: #070C17;
+    --color-on-brand: #0B1220;
+    --color-hero: #1E3A8A;
   }
 
   html {

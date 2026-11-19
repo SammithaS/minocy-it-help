@@ -9,7 +9,7 @@ export const buttonVariants = cva(
       variant: {
         primary: "bg-brand-700 text-on-brand hover:bg-brand-800",
         dark: "bg-ink-surface text-white hover:opacity-90",
-        sun: "bg-sun text-[#17262A] hover:bg-[#f5a62e]",
+        sun: "bg-sun text-[#0F1B2D] hover:bg-sun-hover",
         outline: "border border-control bg-card text-ink hover:bg-canvas",
         ghost: "text-ink hover:bg-canvas",
         danger: "bg-critical text-white hover:opacity-90",

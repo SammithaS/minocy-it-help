@@ -130,7 +130,7 @@ export function ChatPanel({
       className={cn("flex min-h-0 flex-col overflow-hidden rounded-[24px] bg-card shadow-chat", className)}
     >
       <header className="flex items-center gap-3 bg-ink-surface px-5 py-4 text-white">
-        <span className="grid size-10 place-items-center rounded-full bg-sun text-[#17262A]">
+        <span className="grid size-10 place-items-center rounded-full bg-sun text-[#0F1B2D]">
           <Sparkles className="size-5" strokeWidth={2} />
         </span>
         <div className="min-w-0">
@@ -188,7 +188,7 @@ export function ChatPanel({
               <button
                 type="button"
                 onClick={() => submit(undefined, "Yes, please raise a ticket")}
-                className="min-h-11 rounded-full bg-sun px-5 text-sm font-bold text-[#17262A] hover:bg-[#f5a62e]"
+                className="min-h-11 rounded-full bg-sun px-5 text-sm font-bold text-[#0F1B2D] hover:bg-sun-hover"
               >
                 Yes, raise a ticket
               </button>
