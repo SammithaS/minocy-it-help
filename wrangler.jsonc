@@ -23,12 +23,18 @@
   "vectorize": [{ "binding": "VECTORIZE", "index_name": "it-kb", "remote": true }],
   "ai": { "binding": "AI", "remote": true },
   "durable_objects": {
-    "bindings": [{ "name": "SUPPORT_AGENT", "class_name": "SupportAgent" }]
+    "bindings": [
+      { "name": "SUPPORT_AGENT", "class_name": "SupportAgent" },
+      { "name": "TICKET_BOARD", "class_name": "TicketBoard" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SupportAgent"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["SupportAgent"] },
+    { "tag": "v2", "new_sqlite_classes": ["TicketBoard"] }
+  ],
   "vars": {
     "APP_URL": "http://localhost:5173",
     "EMAIL_FROM": "help@example.com"
   }
-  // Later phases add: TICKET_BOARD, workflows, EMAIL, cron triggers.
+  // Later phases add: workflows, EMAIL, cron triggers.
 }

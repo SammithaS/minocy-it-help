@@ -52,6 +52,12 @@ describe("deriveState", () => {
     expect(deriveState(guide("LOW"), [user("I spilled coffee on it")]).suggestedPriority).toBe("CRITICAL");
   });
 
+  it("doesn't count a skipped step as tried or failed", () => {
+    const s = deriveState(guide(), [assistant(step(1, "failed")), assistant({ ...step(2), state: "output-available", output: { outcome: "skipped", note: "I'd rather raise a ticket with IT" } })]);
+    expect(s.steps.map((x) => x.status)).toEqual(["failed", "skipped", "pending", "pending"]);
+    expect(s.failedCount).toBe(1);
+  });
+
   it("is idempotent (rebuilt from scratch each turn)", () => {
     const msgs = [assistant(step(1, "failed")), assistant(step(2, "failed"))];
     const once = deriveState(guide(), msgs);

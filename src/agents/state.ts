@@ -7,7 +7,7 @@
  * correct across refreshes, reconnects and Durable Object evictions.
  */
 
-export type StepStatus = "pending" | "shown" | "worked" | "failed";
+export type StepStatus = "pending" | "shown" | "worked" | "failed" | "skipped";
 export type Priority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export interface GuideStep {
@@ -56,6 +56,8 @@ export interface SupportState {
   resolvedByAssistant: boolean;
   /** Result of the most recent knowledge-base search (null = no search yet). */
   lastSearchConfident: boolean | null;
+  /** The specialist the supervisor last handed off to (shown in the chat header). */
+  activeAgent: string | null;
 }
 
 export const initialSupportState: SupportState = {
@@ -73,6 +75,7 @@ export const initialSupportState: SupportState = {
   ticketNumber: null,
   resolvedByAssistant: false,
   lastSearchConfident: null,
+  activeAgent: null,
 };
 
 // ─────────────────────────── message inspection ───────────────────────────
@@ -95,7 +98,8 @@ export interface UiMessage {
 export const STEP_TOOL = "reportStepOutcome";
 
 export interface StepOutcome {
-  outcome: "worked" | "failed";
+  /** "skipped" = the user chose to raise a ticket instead of trying this step. */
+  outcome: "worked" | "failed" | "skipped";
   note?: string;
 }
 
@@ -143,10 +147,10 @@ export function deriveState(prev: SupportState, messages: UiMessage[]): SupportS
       s.currentStep = Math.max(s.currentStep, n);
       if (p.state === "output-available" && p.output && typeof p.output === "object") {
         const out = p.output as StepOutcome;
-        step.status = out.outcome === "worked" ? "worked" : "failed";
+        step.status = out.outcome;
         step.note = out.note;
         if (out.outcome === "worked") s.resolvedByAssistant = true;
-        else s.failedCount++;
+        else if (out.outcome === "failed") s.failedCount++;
       } else if (step.status === "pending") {
         step.status = "shown";
       }
@@ -176,7 +180,15 @@ export type NextAction =
   | { kind: "await_outcome"; stepNumber: number }
   | { kind: "resolved" }
   | { kind: "escalate"; reason: EscalationReason }
-  | { kind: "ticket_raised"; ticketNumber: string };
+  | { kind: "ticket_raised"; ticketNumber: string; justRaised?: boolean }
+  // Supervisor-level actions (see router.ts decide()):
+  | { kind: "create_ticket"; safety: boolean }
+  | { kind: "ticket_cancelled" }
+  | { kind: "clarify"; question: string }
+  | { kind: "status" }
+  | { kind: "redirect"; to: "password" | "access" }
+  | { kind: "chat" }
+  | { kind: "llm_route" };
 
 export interface TurnSignals {
   /** The latest user message text ("" when the turn was triggered by a tool result). */
@@ -226,3 +238,14 @@ export const escalationLabel: Record<EscalationReason, string> = {
   no_article: "There's no self-help guide for this",
   safety: "Safety issue — stop using the device",
 };
+
+/** Shown in the chat as "Routed to Knowledge agent · KB-002 …". Persisted as a `data-handoff` message part. */
+export interface HandoffEvent {
+  agent: "knowledge" | "ticket" | "access" | "password" | "status" | "chat";
+  label: string;
+  method: "rules" | "llm";
+  reason: string;
+  status: "completed" | "error";
+  summary: string;
+  ms: number;
+}

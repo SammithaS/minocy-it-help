@@ -13,7 +13,34 @@ const OS_LABEL: Record<string, string> = { windows: "Windows", macos: "macOS", l
 function directive(action: NextAction, s: SupportState): string {
   switch (action.kind) {
     case "find_article":
-      return `Work out what's wrong (ask ONE short clarifying question only if the message is too vague to search), then call searchKnowledgeBase. If a result fits, call startGuide with its articleId. Greetings or thanks need no search.`;
+      return `Ask ONE short question to understand what's wrong. Don't troubleshoot from memory.`;
+    case "llm_route":
+      return [
+        `You are the router. Decide what the user needs and hand off — don't solve it yourself:`,
+        `- a fixable IT problem or "how do I…" → askKnowledgeAgent (then show step 1 with ${"reportStepOutcome"} if it finds a guide);`,
+        `- they want a person/ticket, or it clearly needs IT (broken hardware, a request for new equipment) → askTicketAgent, then createTicket;`,
+        `- asking about their tickets → getMyTickets;`,
+        `- small talk or unclear → reply briefly and ask what's not working.`,
+      ].join("\n");
+    case "clarify":
+      return `The Knowledge agent needs one detail to pick the right guide. Ask exactly this, in your own friendly words: "${action.question}"`;
+    case "create_ticket":
+      return [
+        action.safety
+          ? `SAFETY FIRST: tell the user clearly to stop using the device now, unplug it and keep it away from heat or anything flammable (for a spill: switch it off, don't turn it back on). `
+          : "",
+        `The Ticket agent has drafted a ticket (${s.ticketDraft?.priority} · "${s.ticketDraft?.title}"). Call createTicket now — the user reviews, edits and approves the draft in a card. At most one short sentence before the call (e.g. "Here's the ticket I've prepared — check it and send it when you're happy."); write nothing after it. Don't paste the draft into the message.`,
+      ].join("");
+    case "ticket_cancelled":
+      return `The user cancelled the ticket. Say that's fine in one sentence, and that they can ask for one any time.`;
+    case "status":
+      return `The user is asking about their tickets. Use getMyTickets or getTicketStatus and answer in 1–3 sentences (number, status, team). If they add new details, use addCommentToTicket.`;
+    case "redirect":
+      return action.to === "password"
+        ? `This is a password/account problem. Self-service password reset arrives soon; for now point them to ${org.ssoPortal} → "Forgot password", and offer to raise a ticket with the Identity & Access team (askTicketAgent → createTicket) if they're locked out. Never ask for their password.`
+        : `This is an access request. Automated access requests arrive soon; for now offer to raise a ticket with the Identity & Access team (askTicketAgent → createTicket) naming the app and why they need it.`;
+    case "chat":
+      return `Reply briefly and warmly. If they haven't said what's wrong yet, ask what's not working.`;
     case "show_step":
       return `Call reportStepOutcome with stepNumber ${action.stepNumber}. Before it, write at most one short sentence (e.g. acknowledging the last step didn't work). Do NOT write the step text yourself — the step card shows it.`;
     case "await_outcome":
@@ -26,10 +53,12 @@ function directive(action: NextAction, s: SupportState): string {
         action.reason === "safety"
           ? `This is a SAFETY issue. First tell the user clearly to stop using the device, unplug it and keep it away from heat or anything flammable (or, for a spill, switch it off and not turn it back on). Then say this needs the IT team urgently as a CRITICAL ticket.`
           : `Say briefly and kindly that this needs the IT team, mention what was already tried${s.steps.some((x) => x.status === "failed") ? " (the steps that didn't work)" : ""}, and offer to raise a ticket so they don't have to repeat themselves.`,
-        `Ticket raising is being connected in the next release: if the user says yes, tell them the IT team can also be reached on ${org.helpdeskPhone}, and that their conversation is saved.`,
+        `If they already said yes, call askTicketAgent and then createTicket. Otherwise just offer — the chat shows a "Yes, raise a ticket" button.`,
       ].join(" ");
     case "ticket_raised":
-      return `A ticket (${action.ticketNumber}) already exists for this conversation. Answer questions about it; don't start new troubleshooting unless asked.`;
+      return action.justRaised
+        ? `The user just approved the ticket and it was raised as ${action.ticketNumber}. Confirm in 1–2 sentences: the number, which team has it, and that they'll get updates here and by email. Don't ask them to review anything.`
+        : `A ticket (${action.ticketNumber}) already exists for this conversation. Answer questions about it; don't start new troubleshooting unless asked.`;
   }
 }
 

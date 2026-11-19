@@ -2,19 +2,22 @@ import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { Link } from "@tanstack/react-router";
 import { useAgent } from "agents/react";
 import type { UIMessage } from "ai";
-import { AlertTriangle, ArrowUp, BookOpen, Check, Loader2, Sparkles, Ticket, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, BookOpen, Check, GitBranch, Loader2, Sparkles, Ticket, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { InlineMd } from "@/components/inline-md";
 import { cn } from "@/lib/utils";
 import {
   escalationLabel,
+  type HandoffEvent,
   initialSupportState,
   STEP_TOOL,
   type GuideStep,
   type StepOutcome,
   type SupportState,
 } from "../../../../src/agents/state";
+import type { Priority } from "@/components/ui/badge";
 import { MdText } from "./md-text";
+import { TicketDraftCard, TicketRaisedCard } from "./ticket-cards";
 
 interface ToolPart {
   type: string;
@@ -52,7 +55,7 @@ export function ChatPanel({
     name: sessionId,
     onStateUpdate: (s) => setState(s),
   });
-  const { messages, sendMessage, addToolOutput, status, error } = useAgentChat({ agent });
+  const { messages, sendMessage, addToolOutput, addToolApprovalResponse, status, error } = useAgentChat({ agent });
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const sentInitial = useRef(false);
@@ -76,6 +79,28 @@ export function ChatPanel({
     return null;
   }, [messages]);
 
+  const pendingApproval = useMemo(() => {
+    for (const m of messages)
+      for (const p of m.parts) if (isTool(p) && p.type === "tool-createTicket" && p.state === "approval-requested") return p as ToolPart & { approval?: { id: string } };
+    return null;
+  }, [messages]);
+
+  async function approveTicket(edited: Parameters<React.ComponentProps<typeof TicketDraftCard>["onApprove"]>[0]): Promise<string | null> {
+    if (!pendingApproval?.approval) return "This draft has expired. Ask me to raise the ticket again.";
+    const d = state.ticketDraft;
+    const changed = !d || d.title !== edited.title || d.summary !== edited.summary || d.category !== edited.category || d.priority !== edited.priority;
+    if (changed) {
+      const r = (await agent.call("updateTicketDraft", [edited])) as { ok: boolean; error?: string };
+      if (!r.ok) return r.error ?? "Couldn't save your changes.";
+    }
+    void addToolApprovalResponse({ id: pendingApproval.approval.id, approved: true });
+    return null;
+  }
+
+  function cancelTicket() {
+    if (pendingApproval?.approval) void addToolApprovalResponse({ id: pendingApproval.approval.id, approved: false });
+  }
+
   function answerStep(part: ToolPart, outcome: StepOutcome) {
     void addToolOutput({ tool: STEP_TOOL, toolCallId: part.toolCallId, output: outcome } as Parameters<typeof addToolOutput>[0]);
   }
@@ -90,7 +115,14 @@ export function ChatPanel({
   }
 
   const showEscalation =
-    !!state.escalationReason && !state.ticketNumber && !busy && !dismissedEscalation && !pendingStep && messages.length > 0;
+    !!state.escalationReason &&
+    !state.ticketNumber &&
+    !state.ticketDraft &&
+    !pendingApproval &&
+    !busy &&
+    !dismissedEscalation &&
+    !pendingStep &&
+    messages.length > 0;
 
   return (
     <section
@@ -104,7 +136,13 @@ export function ChatPanel({
         <div className="min-w-0">
           <h2 className="font-bold leading-tight">Ask IT</h2>
           <p className="truncate text-xs text-white/70">
-            {state.articleTitle ? `Guide: ${state.articleTitle}` : "Fixes from the IT guides · a person if you need one"}
+            {busy && state.activeAgent
+              ? `${state.activeAgent} is working…`
+              : state.ticketNumber
+                ? `Ticket ${state.ticketNumber}`
+                : state.articleTitle
+                  ? `Guide: ${state.articleTitle}`
+                  : "Fixes from the IT guides · a person if you need one"}
           </p>
         </div>
         <span className={cn("ml-auto size-2.5 rounded-full", agent.identified ? "bg-[#4ADE80]" : "bg-white/30")} title={agent.identified ? "Connected" : "Connecting"} />
@@ -117,7 +155,15 @@ export function ChatPanel({
           </div>
         )}
         {messages.map((m) => (
-          <Message key={m.id} message={m} steps={state.steps} onAnswer={answerStep} disabled={busy} />
+          <Message
+            key={m.id}
+            message={m}
+            state={state}
+            onAnswer={answerStep}
+            onApproveTicket={approveTicket}
+            onCancelTicket={cancelTicket}
+            disabled={busy}
+          />
         ))}
         {busy && messages.at(-1)?.role !== "assistant" && <Typing />}
         {status === "error" && (
@@ -194,17 +240,35 @@ function Typing() {
   );
 }
 
+function HandoffChip({ e }: { e: HandoffEvent }) {
+  return (
+    <p className={cn("flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold", e.status === "completed" ? "bg-canvas text-muted" : "bg-critical-bg text-critical")}>
+      <GitBranch className="size-3.5" />
+      <span>
+        Routed to <strong className="text-ink">{e.label}</strong>
+        {e.summary ? ` · ${e.summary}` : ""}
+      </span>
+      <span className="sr-only">({e.method === "rules" ? "by rule" : "by the router model"}, {e.ms} ms)</span>
+    </p>
+  );
+}
+
 function Message({
   message,
-  steps,
+  state,
   onAnswer,
+  onApproveTicket,
+  onCancelTicket,
   disabled,
 }: {
   message: UIMessage;
-  steps: GuideStep[];
+  state: SupportState;
   onAnswer: (part: ToolPart, outcome: StepOutcome) => void;
+  onApproveTicket: React.ComponentProps<typeof TicketDraftCard>["onApprove"];
+  onCancelTicket: () => void;
   disabled: boolean;
 }) {
+  const steps = state.steps;
   if (message.role === "user") {
     const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
     return (
@@ -225,7 +289,31 @@ function Message({
             </div>
           );
         }
+        if (p.type === "data-handoff") return <HandoffChip key={i} e={(p as unknown as { data: HandoffEvent }).data} />;
         if (!isTool(p)) return null;
+        if (p.type === "tool-createTicket") {
+          if (p.state === "approval-requested" && state.ticketDraft && !state.ticketNumber) {
+            return <TicketDraftCard key={p.toolCallId} draft={state.ticketDraft} busy={disabled} onApprove={onApproveTicket} onCancel={onCancelTicket} />;
+          }
+          if (p.state === "output-available" && p.output?.number) {
+            return (
+              <TicketRaisedCard
+                key={p.toolCallId}
+                number={String(p.output.number)}
+                team={String(p.output.team ?? "IT")}
+                priority={(p.output.priority as Priority) ?? "MEDIUM"}
+              />
+            );
+          }
+          if (p.state === "output-denied") {
+            return (
+              <p key={p.toolCallId} className="text-xs font-semibold text-muted">
+                Ticket cancelled
+              </p>
+            );
+          }
+          return null;
+        }
         if (p.type === "tool-searchKnowledgeBase") {
           return (
             <p key={p.toolCallId} className="flex items-center gap-1.5 text-xs font-semibold text-muted">
@@ -307,7 +395,7 @@ function StepCard({
             <button
               type="button"
               disabled={disabled}
-              onClick={() => onAnswer(part, { outcome: "failed", note: "I'd rather raise a ticket with IT" })}
+              onClick={() => onAnswer(part, { outcome: "skipped", note: "I'd rather raise a ticket with IT" })}
               className="min-h-11 px-2 text-sm font-bold text-brand-700 underline-offset-2 hover:underline disabled:opacity-50"
             >
               Raise a ticket instead

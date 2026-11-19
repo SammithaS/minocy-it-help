@@ -1,7 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { AppWindow, ArrowRight, KeyRound, Mail, Printer, Ticket, Wifi } from "lucide-react";
+import { TicketRow } from "@/components/tickets/ticket-row";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { isOpen, myTicketsQuery } from "@/lib/tickets";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_app/")({
   component: Home,
@@ -25,6 +28,8 @@ function Home() {
   const { me } = Route.useRouteContext();
   const first = me.user.name.split(" ")[0];
   const navigate = useNavigate();
+  const { data: tickets = [] } = useQuery(myTicketsQuery);
+  const open = tickets.filter((t) => isOpen(t.status));
   const [ask, setAsk] = useState("");
   const startChat = (q: string) => {
     if (q.trim()) void navigate({ to: "/chat", search: { q: q.trim() } });
@@ -105,12 +110,19 @@ function Home() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <CardTitle>Your tickets</CardTitle>
-            <CardDescription>Nothing open right now.</CardDescription>
+            <CardDescription>{open.length ? `${open.length} open` : "Nothing open right now."}</CardDescription>
           </div>
-          <Link to="/tickets" className="inline-flex items-center gap-1 text-sm font-bold text-brand-700">
+          <Link to="/tickets" className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-brand-700">
             View all <ArrowRight className="size-4" />
           </Link>
         </div>
+        {open.length > 0 && (
+          <div className="mt-4 space-y-2.5">
+            {open.slice(0, 3).map((t) => (
+              <TicketRow key={t.id} ticket={t} />
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );

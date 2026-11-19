@@ -20,6 +20,7 @@ import { Route as AppChatSessionIdRouteImport } from './routes/_app/chat/$sessio
 import { Route as AppConsoleIndexRouteImport } from './routes/_app/console/index'
 import { Route as AppConsoleSettingsRouteImport } from './routes/_app/console/settings'
 import { Route as AppTicketsIndexRouteImport } from './routes/_app/tickets/index'
+import { Route as AppTicketsNumberRouteImport } from './routes/_app/tickets/$number'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -75,6 +76,11 @@ const AppTicketsIndexRoute = AppTicketsIndexRouteImport.update({
   path: '/tickets/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTicketsNumberRoute = AppTicketsNumberRouteImport.update({
+  id: '/tickets/$number',
+  path: '/tickets/$number',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/articles/$id': typeof AppArticlesIdRoute
   '/chat/$sessionId': typeof AppChatSessionIdRoute
   '/console/settings': typeof AppConsoleSettingsRoute
+  '/tickets/$number': typeof AppTicketsNumberRoute
   '/articles/': typeof AppArticlesIndexRoute
   '/chat/': typeof AppChatIndexRoute
   '/console/': typeof AppConsoleIndexRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/articles/$id': typeof AppArticlesIdRoute
   '/chat/$sessionId': typeof AppChatSessionIdRoute
   '/console/settings': typeof AppConsoleSettingsRoute
+  '/tickets/$number': typeof AppTicketsNumberRoute
   '/articles': typeof AppArticlesIndexRoute
   '/chat': typeof AppChatIndexRoute
   '/console': typeof AppConsoleIndexRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/_app/articles/$id': typeof AppArticlesIdRoute
   '/_app/chat/$sessionId': typeof AppChatSessionIdRoute
   '/_app/console/settings': typeof AppConsoleSettingsRoute
+  '/_app/tickets/$number': typeof AppTicketsNumberRoute
   '/_app/articles/': typeof AppArticlesIndexRoute
   '/_app/chat/': typeof AppChatIndexRoute
   '/_app/console/': typeof AppConsoleIndexRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/articles/$id'
     | '/chat/$sessionId'
     | '/console/settings'
+    | '/tickets/$number'
     | '/articles/'
     | '/chat/'
     | '/console/'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/articles/$id'
     | '/chat/$sessionId'
     | '/console/settings'
+    | '/tickets/$number'
     | '/articles'
     | '/chat'
     | '/console'
@@ -146,6 +157,7 @@ export interface FileRouteTypes {
     | '/_app/articles/$id'
     | '/_app/chat/$sessionId'
     | '/_app/console/settings'
+    | '/_app/tickets/$number'
     | '/_app/articles/'
     | '/_app/chat/'
     | '/_app/console/'
@@ -236,6 +248,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTicketsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/tickets/$number': {
+      id: '/_app/tickets/$number'
+      path: '/tickets/$number'
+      fullPath: '/tickets/$number'
+      preLoaderRoute: typeof AppTicketsNumberRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -258,6 +277,7 @@ interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppArticlesIdRoute: typeof AppArticlesIdRoute
   AppChatSessionIdRoute: typeof AppChatSessionIdRoute
+  AppTicketsNumberRoute: typeof AppTicketsNumberRoute
   AppArticlesIndexRoute: typeof AppArticlesIndexRoute
   AppChatIndexRoute: typeof AppChatIndexRoute
   AppTicketsIndexRoute: typeof AppTicketsIndexRoute
@@ -268,6 +288,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppArticlesIdRoute: AppArticlesIdRoute,
   AppChatSessionIdRoute: AppChatSessionIdRoute,
+  AppTicketsNumberRoute: AppTicketsNumberRoute,
   AppArticlesIndexRoute: AppArticlesIndexRoute,
   AppChatIndexRoute: AppChatIndexRoute,
   AppTicketsIndexRoute: AppTicketsIndexRoute,

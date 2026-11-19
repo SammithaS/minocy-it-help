@@ -1,91 +1,47 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { searchKb, type Os } from "../rag/search";
 import type { AppEnv } from "../env";
-import { STEP_TOOL, type GuideStep, type Priority, type SupportState } from "./state";
+import { createTicket, notifyBoard } from "../lib/tickets";
+import { STEP_TOOL, type Priority, type SupportState } from "./state";
 
 export interface ToolContext {
   env: AppEnv;
-  os: Os | null;
+  sessionId: string;
+  ownerId: string | null;
   getState: () => SupportState;
   setState: (s: SupportState) => void;
+  /** Hand-offs to specialist agents (logged and shown as chips). */
+  askKnowledgeAgent: (query: string) => Promise<{ articleId: string | null; title: string | null; clarifyingQuestion: string | null; reason: string }>;
+  askTicketAgent: () => Promise<{ ok: boolean; error?: string }>;
 }
 
-interface ArticleRow {
-  id: string;
-  title: string;
-  priority: Priority;
-  ticket_category: string;
-  action: string;
-}
+const STATUS_LABEL: Record<string, string> = {
+  NEW: "new — waiting for the IT team",
+  ASSIGNED: "assigned to an engineer",
+  IN_PROGRESS: "being worked on",
+  WAITING_ON_USER: "waiting for your reply",
+  RESOLVED: "resolved — waiting for your confirmation",
+  CLOSED: "closed",
+};
 
 export function buildTools(ctx: ToolContext) {
+  const db = ctx.env.DB;
+
+  const ownTicket = (number: string) =>
+    db
+      .prepare(
+        `SELECT t.id, t.number, t.title, t.status, t.priority, t.sla_due_at, t.updated_at, t.team_id, tm.name AS team
+         FROM tickets t LEFT JOIN teams tm ON tm.id = t.team_id WHERE t.number = ? AND t.requester_id = ?`,
+      )
+      .bind(number.toUpperCase().replace(/^INC(\d)/, "INC-$1"), ctx.ownerId)
+      .first<{ id: string; number: string; title: string; status: string; priority: string; sla_due_at: number | null; updated_at: number; team_id: string | null; team: string | null }>();
+
   return {
-    searchKnowledgeBase: tool({
-      description:
-        "Search the company IT guides for the user's problem. Use the user's own words plus any device details. Returns up to 5 guides with a confidence flag.",
-      inputSchema: z.object({ query: z.string().min(2).max(300).describe("What's wrong, in plain words") }),
-      execute: async ({ query }) => {
-        const r = await searchKb({ db: ctx.env.DB, ai: ctx.env.AI, vectorize: ctx.env.VECTORIZE }, query, { os: ctx.os, limit: 5 });
-        ctx.setState({ ...ctx.getState(), lastSearchConfident: r.confident });
-        return {
-          confident: r.confident,
-          results: r.hits.map((h) => ({ articleId: h.articleId, title: h.title, matched: h.section, snippet: h.snippet })),
-          guidance: r.confident
-            ? "Pick the guide that fits the user's problem and call startGuide. If none fits, say so and offer to raise a ticket."
-            : "No guide matches well. Tell the user you don't have a guide for this and offer to raise a ticket with the IT team. Don't improvise company-specific steps.",
-        };
-      },
-    }),
-
-    startGuide: tool({
-      description: "Start walking the user through a guide (from searchKnowledgeBase). Loads its steps; then show step 1 with reportStepOutcome.",
-      inputSchema: z.object({ articleId: z.string().regex(/^KB-\d{3}$/) }),
-      execute: async ({ articleId }) => {
-        const db = ctx.env.DB;
-        const article = await db
-          .prepare("SELECT id, title, priority, ticket_category, action FROM kb_articles WHERE id = ?")
-          .bind(articleId)
-          .first<ArticleRow>();
-        if (!article) return { error: `No guide ${articleId}. Search again.` };
-        const { results } = await db
-          .prepare(`SELECT section, "order", text FROM kb_steps WHERE article_id = ? ORDER BY CASE section WHEN 'quick' THEN 0 ELSE 1 END, "order"`)
-          .bind(articleId)
-          .all<{ section: "quick" | "advanced"; order: number; text: string }>();
-        const steps: GuideStep[] = results.map((r, i) => ({ order: i + 1, section: r.section, text: r.text, status: "pending" }));
-        const body = await db.prepare("SELECT body FROM kb_articles WHERE id = ?").bind(articleId).first<{ body: string }>();
-        const escalateWhen = (body?.body.split(/^## Escalate when\s*$/m)[1] ?? "")
-          .split("\n")
-          .filter((l) => l.startsWith("- "))
-          .map((l) => l.slice(2));
-        const prev = ctx.getState();
-        ctx.setState({
-          ...prev,
-          articleId,
-          articleTitle: article.title,
-          articlePriority: article.priority,
-          ticketCategory: article.ticket_category,
-          steps,
-          currentStep: 0,
-          failedCount: 0,
-          resolvedByAssistant: false,
-          escalationReason: null,
-        });
-        return {
-          articleId,
-          title: article.title,
-          totalSteps: steps.length,
-          escalateWhen,
-          guidance: `Now call ${STEP_TOOL} with stepNumber 1. Don't write the step text yourself.`,
-        };
-      },
-    }),
-
     [STEP_TOOL]: tool({
       description:
         "Show ONE guide step to the user as a card with 'That fixed it' / 'Still not working' buttons, and wait for their answer. The card shows the step text from the guide.",
       inputSchema: z.object({ stepNumber: z.number().int().min(1).describe("1-based step number from the current guide") }),
-      outputSchema: z.object({ outcome: z.enum(["worked", "failed"]), note: z.string().optional() }),
+      outputSchema: z.object({ outcome: z.enum(["worked", "failed", "skipped"]), note: z.string().optional() }),
       // No execute: the browser answers with the user's button click (client tool).
     }),
 
@@ -102,7 +58,118 @@ export function buildTools(ctx: ToolContext) {
         return { escalated: true, condition, priority: p, guidance: "Explain briefly why this needs the IT team and offer to raise a ticket." };
       },
     }),
+
+    // ── hand-offs the supervisor model can choose when the routing rules didn't decide ──
+    askKnowledgeAgent: tool({
+      description: "Hand the problem to the Knowledge agent, which finds the right IT guide. Use for anything that sounds like a fixable IT problem.",
+      inputSchema: z.object({ query: z.string().min(2).max(500).describe("The problem in the user's words plus any detail they gave") }),
+      execute: async ({ query }) => {
+        const r = await ctx.askKnowledgeAgent(query);
+        if (r.articleId) return { guide: `${r.articleId} ${r.title}`, guidance: `Now call ${STEP_TOOL} with stepNumber 1. Don't write the step text yourself.` };
+        if (r.clarifyingQuestion) return { guide: null, guidance: `Ask the user exactly one question: ${r.clarifyingQuestion}` };
+        return { guide: null, guidance: "There's no guide for this. Say so briefly and offer to raise a ticket with the IT team." };
+      },
+    }),
+
+    askTicketAgent: tool({
+      description:
+        "Hand over to the Ticket agent to draft a ticket for the IT team. Use only when the user wants a ticket or a person, or there's no self-help guide and they agree.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const r = await ctx.askTicketAgent();
+        return r.ok ? { drafted: true, guidance: "Now call createTicket so the user can review and approve the draft." } : { drafted: false, error: r.error };
+      },
+    }),
+
+    createTicket: tool({
+      description:
+        "Raise the drafted ticket. The user sees an editable draft card and must approve it first — call this, don't ask in text.",
+      inputSchema: z.object({}),
+      needsApproval: true,
+      execute: async () => {
+        const s = ctx.getState();
+        if (s.ticketNumber) return { number: s.ticketNumber, alreadyRaised: true };
+        if (!s.ticketDraft || !ctx.ownerId) return { error: "No ticket draft. Ask the Ticket agent first." };
+        const d = s.ticketDraft;
+        const created = await createTicket(ctx.env, {
+          requesterId: ctx.ownerId,
+          title: d.title,
+          description: d.summary,
+          category: d.category as never,
+          priority: d.priority,
+          source: "CHAT",
+          sessionId: ctx.sessionId,
+          kbArticleId: d.kbArticleId,
+          stepsTried: d.stepsTried,
+          device: d.device,
+        });
+        ctx.setState({ ...ctx.getState(), ticketNumber: created.number });
+        return {
+          number: created.number,
+          team: created.team?.name ?? "IT service desk",
+          priority: created.priority,
+          slaDueAt: new Date(created.slaDueAt).toISOString(),
+        };
+      },
+    }),
+
+    // ── tickets the user already has ──
+    getMyTickets: tool({
+      description: "List the user's recent tickets with their status.",
+      inputSchema: z.object({ openOnly: z.boolean().default(true) }),
+      execute: async ({ openOnly }) => {
+        const { results } = await db
+          .prepare(
+            `SELECT number, title, status, priority, updated_at FROM tickets WHERE requester_id = ?
+             ${openOnly ? "AND status NOT IN ('CLOSED')" : ""} ORDER BY created_at DESC LIMIT 10`,
+          )
+          .bind(ctx.ownerId)
+          .all<{ number: string; title: string; status: string; priority: string; updated_at: number }>();
+        return { tickets: results.map((t) => ({ ...t, status: STATUS_LABEL[t.status] ?? t.status })) };
+      },
+    }),
+
+    getTicketStatus: tool({
+      description: "Get the status of one of the user's tickets by number (e.g. INC-1031).",
+      inputSchema: z.object({ number: z.string().regex(/^INC-?\d+$/i) }),
+      execute: async ({ number }) => {
+        const t = await ownTicket(number);
+        if (!t) return { error: `No ticket ${number} found for you.` };
+        const last = await db
+          .prepare("SELECT body, created_at FROM ticket_comments WHERE ticket_id = ? AND visibility = 'public' ORDER BY created_at DESC LIMIT 1")
+          .bind(t.id)
+          .first<{ body: string; created_at: number }>();
+        return {
+          number: t.number,
+          title: t.title,
+          status: STATUS_LABEL[t.status] ?? t.status,
+          team: t.team,
+          priority: t.priority,
+          dueBy: t.sla_due_at ? new Date(t.sla_due_at).toISOString() : null,
+          latestUpdate: last?.body ?? null,
+        };
+      },
+    }),
+
+    addCommentToTicket: tool({
+      description: "Add the user's message as a comment on one of their tickets (e.g. new details for the IT team).",
+      inputSchema: z.object({ number: z.string().regex(/^INC-?\d+$/i), comment: z.string().min(2).max(2000) }),
+      execute: async ({ number, comment }) => {
+        const t = await ownTicket(number);
+        if (!t) return { error: `No ticket ${number} found for you.` };
+        const now = Date.now();
+        await db.batch([
+          db
+            .prepare("INSERT INTO ticket_comments (id, ticket_id, author_id, body, visibility, source, created_at) VALUES (?, ?, ?, ?, 'public', 'chat', ?)")
+            .bind(crypto.randomUUID(), t.id, ctx.ownerId, comment, now),
+          db.prepare("UPDATE tickets SET updated_at = ? WHERE id = ?").bind(now, t.id),
+        ]);
+        await notifyBoard(ctx.env, { type: "ticket.updated", ticketId: t.id, number: t.number, teamId: t.team_id, changes: { comment: true } });
+        return { added: true, number: t.number };
+      },
+    }),
   };
 }
 
 export type SupportTools = ReturnType<typeof buildTools>;
+export type ToolName = keyof SupportTools;

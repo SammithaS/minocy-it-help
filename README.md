@@ -45,7 +45,7 @@ Sign in with a seeded account — no real email needed locally. The 6-digit code
 ## Layout
 
 ```
-src/            Worker: index.ts (entry), api/ (Hono), agents/ (SupportAgent, rules, tools, prompt), db/, lib/ (auth, llm), email/
+src/            Worker: index.ts (entry), api/ (Hono), agents/ (supervisor, router, rules, tools, specialists/), durable/ (TicketBoard), db/, lib/ (auth, llm, tickets, sla), email/
 web/src/        React 19 + TanStack Router/Query + Tailwind v4 (Option B design tokens in styles.css)
 migrations/     D1 migrations (drizzle-kit)
 src/rag/        kb-sections.ts (parse + chunk), embed.ts, rrf.ts, search.ts (hybrid search)

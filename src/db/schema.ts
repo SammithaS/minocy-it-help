@@ -344,3 +344,23 @@ export const counters = sqliteTable("counters", {
   name: text("name").primaryKey(),
   value: integer("value").notNull(),
 });
+
+/** One row per agent hand-off or back-office agent run (routing analytics, budgets, evals). */
+export const agentRuns = sqliteTable(
+  "agent_runs",
+  {
+    id: id(),
+    sessionId: text("session_id"),
+    ticketId: text("ticket_id"),
+    userId: text("user_id"),
+    agent: text("agent").notNull(), // knowledge | ticket | access | triage | kb_gap | supervisor
+    routeMethod: text("route_method", { enum: ["rules", "llm", "workflow"] }).notNull(),
+    reason: text("reason"),
+    status: text("status", { enum: ["completed", "error", "aborted", "interrupted", "skipped"] }).notNull(),
+    summary: text("summary"),
+    error: text("error"),
+    durationMs: integer("duration_ms"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("agent_runs_agent_idx").on(t.agent, t.createdAt), index("agent_runs_session_idx").on(t.sessionId)],
+);
