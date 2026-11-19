@@ -1,0 +1,8 @@
+GOOGLE_GENERATIVE_AI_API_KEY=
+AI_GATEWAY_ACCOUNT_ID=
+AI_GATEWAY_ID=
+RESEND_API_KEY=
+EMAIL_FROM=help@yourdomain
+BETTER_AUTH_SECRET=change-me-to-a-long-random-string
+APP_URL=http://localhost:5173
+IT_ADMIN_EMAIL=

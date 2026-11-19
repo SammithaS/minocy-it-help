@@ -1,0 +1,14 @@
+import { api } from "./api/app";
+import type { AppEnv } from "./env";
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/")) {
+      return api.fetch(request, env, ctx);
+    }
+    // Static assets / SPA are served by the assets binding before the Worker runs;
+    // anything reaching here is an unknown non-API path.
+    return new Response("Not found", { status: 404 });
+  },
+} satisfies ExportedHandler<AppEnv>;

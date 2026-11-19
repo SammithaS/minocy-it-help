@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+
+  --color-brand-700: #0B6E76;
+  --color-brand-800: #08555B;
+  --color-brand-600: #138A93;
+  --color-brand-50: #E3F2F1;
+  --color-sun: #FFB547;
+  --color-sun-50: #FFE3B3;
+
+  --color-ink: #17262A;
+  --color-muted: #55666B;
+  --color-line: #E8EEED;
+  --color-control: #CBD7D6;
+  --color-canvas: #F3F6F5;
+  --color-chat-bg: #FAFBFB;
+  --color-card: #FFFFFF;
+  /* surfaces that stay dark in both themes (chat header, dark buttons) */
+  --color-ink-surface: #17262A;
+  /* text colour on brand-700 fills */
+  --color-on-brand: #FFFFFF;
+  /* hero fill (kept deep in dark mode so white text stays readable) */
+  --color-hero: #0B6E76;
+
+  --color-new: #2B4AC2;
+  --color-new-bg: #E6ECFF;
+  --color-progress: #8A5300;
+  --color-progress-bg: #FFF1D6;
+  --color-resolved: #146C34;
+  --color-resolved-bg: #DCF5E4;
+  --color-critical: #B91C1C;
+  --color-critical-bg: #FEE2E2;
+
+  --radius-hero: 28px;
+  --radius-card: 22px;
+  --radius-tile: 20px;
+  --shadow-chat: 0 16px 40px rgba(23, 38, 42, 0.10);
+}
+
+/* Dark mode: re-point the semantic tokens. `ink` stays dark for chat header/dark buttons via --color-ink-surface. */
+@layer base {
+  .dark {
+    --color-canvas: #0E1517;
+    --color-card: #152024;
+    --color-chat-bg: #111b1e;
+    --color-line: #24353A;
+    --color-control: #33494F;
+    --color-ink: #E6EFEE;
+    --color-muted: #9DB0B3;
+    --color-brand-700: #2BB3BD;
+    --color-brand-800: #8FDCE1;
+    --color-brand-50: #12343A;
+    --color-new-bg: #1C2A5C;
+    --color-new: #AFC0FF;
+    --color-progress-bg: #3D2C0A;
+    --color-progress: #FFD38A;
+    --color-resolved-bg: #12361F;
+    --color-resolved: #8EE0AC;
+    --color-critical-bg: #44161A;
+    --color-critical: #FFA9A9;
+    --color-ink-surface: #0A1113;
+    --color-on-brand: #0E1517;
+    --color-hero: #0B4F55;
+  }
+
+  html {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--color-canvas);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-700);
+    outline-offset: 2px;
+  }
+}
