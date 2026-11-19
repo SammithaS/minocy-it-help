@@ -17,7 +17,11 @@
     "db:migrate": "wrangler d1 migrations apply DB --local",
     "db:seed": "tsx scripts/seed.ts && wrangler d1 execute DB --local --file=.wrangler/seed.sql",
     "db:reset": "pnpm db:migrate && pnpm db:seed",
-    "kb:check": "tsx scripts/check-kb.ts"
+    "kb:check": "tsx scripts/check-kb.ts",
+    "kb:ingest": "tsx scripts/ingest-kb.ts",
+    "eval:retrieval": "tsx scripts/eval.ts retrieval",
+    "eval": "tsx scripts/eval.ts",
+    "kb:search": "tsx scripts/search-kb.ts"
   },
   "dependencies": {
     "@hono/zod-validator": "0.9.1",
@@ -57,6 +61,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.14.0",
     "gray-matter": "4.0.3",
+    "promptfoo": "0.126.0",
     "tailwindcss": "4.3.5",
     "tsx": "4.23.15",
     "typescript": "6.0.3",

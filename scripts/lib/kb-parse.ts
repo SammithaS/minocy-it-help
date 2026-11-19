@@ -1,9 +1,12 @@
 /**
- * Parses kb/*.md articles. Shared by `pnpm kb:check` (now) and `pnpm kb:ingest` (Phase 2).
+ * Parses kb/*.md articles (frontmatter + sections). Used by `pnpm kb:check` and `pnpm kb:ingest`.
  */
 import matter from "gray-matter";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { z } from "zod";
 import { kbPlaceholders, TICKET_CATEGORIES } from "../../src/org-config";
+import { parseSections, type ArticleSections } from "../../src/rag/kb-sections";
 
 export const frontmatterSchema = z.object({
   id: z.string().regex(/^KB-\d{3}$/),
@@ -17,70 +20,39 @@ export const frontmatterSchema = z.object({
 });
 export type KbFrontmatter = z.infer<typeof frontmatterSchema>;
 
-export const SECTION_ORDER = ["Symptoms", "Quick fixes", "Advanced steps", "Escalate when"] as const;
-type SectionName = (typeof SECTION_ORDER)[number];
-
-export interface KbStep {
-  section: "quick" | "advanced";
-  order: number;
-  text: string;
-}
-
 export interface ParsedArticle {
+  file: string;
+  source: string;
   meta: KbFrontmatter;
   /** Markdown body with placeholders left as-is. */
   body: string;
-  /** Text before the first `##` (title + intro). */
-  intro: string;
-  sections: Record<SectionName, string>;
-  steps: KbStep[];
-  escalateWhen: string[];
+  sections: ArticleSections;
   placeholders: string[];
 }
 
 const PLACEHOLDER = /\{\{\s*(\w+)\s*\}\}/g;
 
-function numberedItems(markdown: string): string[] {
-  return [...markdown.matchAll(/^\d+\.\s+(.+)$/gm)].map((m) => m[1]!.trim());
-}
-
-function bulletItems(markdown: string): string[] {
-  return [...markdown.matchAll(/^[-*]\s+(.+)$/gm)].map((m) => m[1]!.trim());
-}
-
-export function parseArticle(source: string): ParsedArticle {
+export function parseArticle(source: string, file = "<inline>"): ParsedArticle {
   const { data, content } = matter(source);
   const meta = frontmatterSchema.parse(data);
   const body = content.trim();
-
-  const parts = body.split(/^##\s+/m);
-  const intro = parts.shift()!.trim();
-  const found: string[] = [];
-  const sections = {} as Record<SectionName, string>;
-  for (const part of parts) {
-    const newline = part.indexOf("\n");
-    const heading = (newline === -1 ? part : part.slice(0, newline)).trim();
-    found.push(heading);
-    sections[heading as SectionName] = newline === -1 ? "" : part.slice(newline + 1).trim();
-  }
-  if (found.join("|") !== SECTION_ORDER.join("|")) {
-    throw new Error(`sections must be exactly ${SECTION_ORDER.join(" → ")}; found ${found.join(" → ")}`);
-  }
-
-  const steps: KbStep[] = [
-    ...numberedItems(sections["Quick fixes"]).map((text, i) => ({ section: "quick" as const, order: i + 1, text })),
-    ...numberedItems(sections["Advanced steps"]).map((text, i) => ({ section: "advanced" as const, order: i + 1, text })),
-  ];
-
+  const sections = parseSections(body);
+  if (sections.title !== meta.title) throw new Error(`'# ${sections.title}' doesn't match frontmatter title`);
   return {
+    file,
+    source,
     meta,
     body,
-    intro,
     sections,
-    steps,
-    escalateWhen: bulletItems(sections["Escalate when"]),
     placeholders: [...new Set([...source.matchAll(PLACEHOLDER)].map((m) => m[1]!))],
   };
 }
 
 export const unknownPlaceholders = (a: ParsedArticle) => a.placeholders.filter((p) => !(p in kbPlaceholders));
+
+export function readKbDir(dir = "kb"): { file: string; source: string }[] {
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".md"))
+    .sort()
+    .map((file) => ({ file, source: readFileSync(join(dir, file), "utf8") }));
+}

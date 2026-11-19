@@ -1,0 +1,92 @@
+# Retrieval eval: realistic employee messages → expected KB article.
+# Metrics: hit@1 (right article ranked first) and hit@5 (in the top 5).
+# A case passes when hit@5 passes; hit@1 is reported as its own metric.
+# Run: pnpm eval:retrieval   (needs `pnpm kb:ingest` first)
+description: KB hybrid retrieval (Vectorize + FTS5 + RRF)
+
+prompts:
+  - "{{query}}"
+
+providers:
+  - file://providers/kb-search.ts
+
+defaultTest:
+  threshold: 0.5
+  assert:
+    - type: javascript
+      metric: hit@1
+      value: "context.vars.expected === 'none' ? true : JSON.parse(output).ids[0] === context.vars.expected"
+    - type: javascript
+      metric: hit@5
+      value: "context.vars.expected === 'none' ? true : JSON.parse(output).ids.slice(0, 5).includes(context.vars.expected)"
+    - type: javascript
+      metric: no-guide
+      value: "context.vars.expected !== 'none' ? true : JSON.parse(output).confident === false"
+
+tests:
+  # KB-001 laptop slow
+  - vars: { query: "laptop slow", expected: KB-001 }
+  - vars: { query: "my laptop is super laggy and keeps hanging when i open excel", expected: KB-001 }
+  - vars: { query: "laptop bahut slow hai yaar", expected: KB-001 }
+  # KB-002 Wi-Fi
+  - vars: { query: "wifi keeps dropping", expected: KB-002 }
+  - vars: { query: "wifi nahi chal raha", expected: KB-002 }
+  - vars: { query: "my wirless keeps disconecting every few mins", expected: KB-002 }
+  # KB-003 VPN
+  - vars: { query: "vpn timeout", expected: KB-003 }
+  - vars: { query: "cant connect to the office network from home, secure connect just spins", expected: KB-003 }
+  # KB-004 password
+  - vars: { query: "forgot my password", expected: KB-004 }
+  - vars: { query: "account got locked after too many tries", expected: KB-004 }
+  # KB-005 MFA
+  - vars: { query: "got a new phone, authenticator app is empty", expected: KB-005 }
+  - vars: { query: "not getting the approve sign in notification", expected: KB-005 }
+  # KB-006 Outlook
+  - vars: { query: "emails stuck in outbox", expected: KB-006 }
+  - vars: { query: "outlook says disconnected and no new mail since morning", expected: KB-006 }
+  # KB-007 Teams
+  - vars: { query: "people cant hear me on teams calls", expected: KB-007 }
+  - vars: { query: "webcam black screen in meeting", expected: KB-007 }
+  # KB-008 printer
+  - vars: { query: "printer jammed", expected: KB-008 }
+  - vars: { query: "print job stuck in queue, printer shows offline", expected: KB-008 }
+  # KB-009 install software
+  - vars: { query: "how do i install zoom", expected: KB-009 }
+  - vars: { query: "installer asking for admin password", expected: KB-009 }
+  # KB-010 monitor / dock
+  - vars: { query: "second monitor says no signal", expected: KB-010 }
+  - vars: { query: "docking station not working usb-c", expected: KB-010 }
+  # KB-011 battery
+  - vars: { query: "battery drains really fast", expected: KB-011 }
+  - vars: { query: "laptop is plugged in but not charging", expected: KB-011 }
+  # KB-012 won't turn on / spill
+  - vars: { query: "spilled coffee on my laptop", expected: KB-012 }
+  - vars: { query: "laptop wont turn on at all", expected: KB-012 }
+  # KB-013 BitLocker
+  - vars: { query: "blue screen asking for recovery key", expected: KB-013 }
+  - vars: { query: "bitlocker", expected: KB-013 }
+  # KB-014 OneDrive
+  - vars: { query: "onedrive not syncing red x on files", expected: KB-014 }
+  - vars: { query: "my files arent uploading to sharepoint", expected: KB-014 }
+  # KB-015 access request
+  - vars: { query: "need access to jira", expected: KB-015 }
+  - vars: { query: "access denied when opening salesforce", expected: KB-015 }
+  # KB-016 phishing
+  - vars: { query: "got a weird email asking me to buy gift cards for the ceo", expected: KB-016 }
+  - vars: { query: "i clicked a link in a suspicious email", expected: KB-016 }
+  # KB-017 shared mailbox / calendar
+  - vars: { query: "shared mailbox not showing in outlook", expected: KB-017 }
+  - vars: { query: "how to open my managers calendar", expected: KB-017 }
+  # KB-018 app crashing
+  - vars: { query: "excel keeps crashing", expected: KB-018 }
+  - vars: { query: "word closes by itself when i save", expected: KB-018 }
+  # KB-019 shared drive
+  - vars: { query: "s drive has a red x", expected: KB-019 }
+  # KB-020 bluetooth
+  - vars: { query: "bluetooth headset wont pair", expected: KB-020 }
+
+  # Out of scope → the search should NOT be confident (agent offers a ticket instead)
+  - vars: { query: "the coffee machine on floor 3 is leaking", expected: none }
+  - vars: { query: "how do i apply for annual leave", expected: none }
+  - vars: { query: "the office AC is too cold", expected: none }
+  - vars: { query: "what's the cafeteria menu today", expected: none }

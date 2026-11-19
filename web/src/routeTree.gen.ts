@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppConsoleRouteImport } from './routes/_app/console'
 import { Route as AppArticlesIndexRouteImport } from './routes/_app/articles/index'
+import { Route as AppArticlesIdRouteImport } from './routes/_app/articles/$id'
 import { Route as AppConsoleIndexRouteImport } from './routes/_app/console/index'
 import { Route as AppConsoleSettingsRouteImport } from './routes/_app/console/settings'
 import { Route as AppTicketsIndexRouteImport } from './routes/_app/tickets/index'
@@ -42,6 +43,11 @@ const AppArticlesIndexRoute = AppArticlesIndexRouteImport.update({
   path: '/articles/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppArticlesIdRoute = AppArticlesIdRouteImport.update({
+  id: '/articles/$id',
+  path: '/articles/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppConsoleIndexRoute = AppConsoleIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -62,6 +68,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
   '/console': typeof AppConsoleRouteWithChildren
+  '/articles/$id': typeof AppArticlesIdRoute
   '/console/settings': typeof AppConsoleSettingsRoute
   '/articles/': typeof AppArticlesIndexRoute
   '/console/': typeof AppConsoleIndexRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/': typeof AppIndexRoute
+  '/articles/$id': typeof AppArticlesIdRoute
   '/console/settings': typeof AppConsoleSettingsRoute
   '/articles': typeof AppArticlesIndexRoute
   '/console': typeof AppConsoleIndexRoute
@@ -81,6 +89,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/console': typeof AppConsoleRouteWithChildren
   '/_app/': typeof AppIndexRoute
+  '/_app/articles/$id': typeof AppArticlesIdRoute
   '/_app/console/settings': typeof AppConsoleSettingsRoute
   '/_app/articles/': typeof AppArticlesIndexRoute
   '/_app/console/': typeof AppConsoleIndexRoute
@@ -92,19 +101,27 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/console'
+    | '/articles/$id'
     | '/console/settings'
     | '/articles/'
     | '/console/'
     | '/tickets/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    '/login' | '/' | '/console/settings' | '/articles' | '/console' | '/tickets'
+    | '/login'
+    | '/'
+    | '/articles/$id'
+    | '/console/settings'
+    | '/articles'
+    | '/console'
+    | '/tickets'
   id:
     | '__root__'
     | '/_app'
     | '/login'
     | '/_app/console'
     | '/_app/'
+    | '/_app/articles/$id'
     | '/_app/console/settings'
     | '/_app/articles/'
     | '/_app/console/'
@@ -153,6 +170,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArticlesIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/articles/$id': {
+      id: '/_app/articles/$id'
+      path: '/articles/$id'
+      fullPath: '/articles/$id'
+      preLoaderRoute: typeof AppArticlesIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/console/': {
       id: '/_app/console/'
       path: '/'
@@ -194,6 +218,7 @@ const AppConsoleRouteWithChildren = AppConsoleRoute._addFileChildren(
 interface AppRouteChildren {
   AppConsoleRoute: typeof AppConsoleRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
+  AppArticlesIdRoute: typeof AppArticlesIdRoute
   AppArticlesIndexRoute: typeof AppArticlesIndexRoute
   AppTicketsIndexRoute: typeof AppTicketsIndexRoute
 }
@@ -201,6 +226,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppConsoleRoute: AppConsoleRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
+  AppArticlesIdRoute: AppArticlesIdRoute,
   AppArticlesIndexRoute: AppArticlesIndexRoute,
   AppTicketsIndexRoute: AppTicketsIndexRoute,
 }

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { authRoutes } from "./auth";
 import { sessionMiddleware, type HonoEnv } from "./context";
+import { kbRoutes } from "./kb";
 
 export const api = new Hono<HonoEnv>()
   .basePath("/api")
@@ -9,6 +10,7 @@ export const api = new Hono<HonoEnv>()
   .get("/health", (c) => c.json({ ok: true }))
   .use(sessionMiddleware)
   .route("/", authRoutes)
+  .route("/", kbRoutes)
   .notFound((c) => c.json({ error: "not_found" }, 404))
   .onError((err, c) => {
     console.error(err);

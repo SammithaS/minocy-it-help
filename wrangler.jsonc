@@ -18,9 +18,13 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Vectorize and Workers AI have no local simulator: `remote: true` makes `pnpm dev`
+  // and scripts use the real (free-tier) services on your Cloudflare account.
+  "vectorize": [{ "binding": "VECTORIZE", "index_name": "it-kb", "remote": true }],
+  "ai": { "binding": "AI", "remote": true },
   "vars": {
     "APP_URL": "http://localhost:5173",
     "EMAIL_FROM": "help@example.com"
   }
-  // Later phases add: VECTORIZE, AI, SUPPORT_AGENT, TICKET_BOARD, workflows, EMAIL, cron triggers.
+  // Later phases add: SUPPORT_AGENT, TICKET_BOARD, workflows, EMAIL, cron triggers.
 }
