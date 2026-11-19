@@ -16,6 +16,22 @@ export const org = {
   workingHours: { start: 9, end: 18, days: [1, 2, 3, 4, 5] },
 } as const;
 
+/** `{{placeholder}}` values substituted into kb/*.md at ingestion time. */
+export const kbPlaceholders: Record<string, string> = {
+  company: org.company,
+  email_domain: org.emailDomain,
+  helpdesk_phone: org.helpdeskPhone,
+  wifi_ssid: org.wifiSsid,
+  guest_wifi_ssid: org.guestWifiSsid,
+  vpn_name: org.vpnName,
+  sso_portal: org.ssoPortal,
+  software_centre: org.softwareCentre,
+};
+
+export function fillPlaceholders(text: string): string {
+  return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) => kbPlaceholders[key] ?? match);
+}
+
 export const TEAMS = [
   { id: "team-network", name: "Network", category: "network" },
   { id: "team-hardware", name: "Hardware", category: "hardware" },
