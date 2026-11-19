@@ -283,10 +283,16 @@ export const notifications = sqliteTable("notifications", {
   id: id(),
   ticketId: text("ticket_id").references(() => tickets.id, { onDelete: "set null" }),
   channel: text("channel", { enum: ["email_team", "email_employee", "email_admin"] }).notNull(),
+  /** team_new | critical_admin | employee_ack | sla_reminder | sla_escalation | resolved_confirm | reopened | comment | digest | inbound_bounce */
+  kind: text("kind").notNull().default("other"),
   recipient: text("recipient").notNull(),
   subject: text("subject").notNull(),
-  status: text("status", { enum: ["sent", "failed", "skipped"] }).notNull(),
+  /** "log" = rendered and stored only (dev / no domain yet); "email-service" | "resend" = actually sent. */
+  transport: text("transport").notNull().default("log"),
+  status: text("status", { enum: ["sent", "logged", "failed", "skipped"] }).notNull(),
   error: text("error"),
+  html: text("html"),
+  text: text("text"),
   createdAt: createdAt(),
 });
 

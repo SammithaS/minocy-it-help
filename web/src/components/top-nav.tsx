@@ -6,6 +6,7 @@ import {
   Home,
   LayoutDashboard,
   LogOut,
+  Mail,
   Moon,
   Settings,
   Ticket,
@@ -32,7 +33,10 @@ export function navItemsFor(me: Me): NavItem[] {
     { to: "/console", label: "Console", icon: LayoutDashboard },
     { to: "/", label: "Portal", icon: Headset },
   ];
-  if (me.user.role === "admin") staff.push({ to: "/console/settings", label: "Settings", icon: Settings });
+  if (me.user.role === "admin") {
+    staff.push({ to: "/console/outbox", label: "Outbox", icon: Mail });
+    staff.push({ to: "/console/settings", label: "Settings", icon: Settings });
+  }
   return staff;
 }
 

@@ -3,7 +3,8 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "lib": ["ES2023"],
-    "types": ["node"]
+    "types": ["node"],
+    "jsx": "react-jsx"
   },
   "include": ["worker-configuration.d.ts", "vite.config.ts", "vitest.config.ts", "drizzle.config.ts", "eslint.config.js", "scripts", "evals"]
 }

@@ -133,7 +133,24 @@ export async function createTicket(env: AppEnv, input: NewTicket, now = new Date
     status: "NEW",
   };
   await notifyBoard(env, { type: "ticket.created", ticket: { ...created, teamId: team?.id ?? null } });
+  await startTicketWorkflow(env, id);
   return created;
+}
+
+/**
+ * Starts the durable lifecycle for a ticket. A reopened (closed) ticket gets a fresh instance that
+ * skips triage and the "new ticket" emails. Never fails ticket creation.
+ */
+export async function startTicketWorkflow(env: AppEnv, ticketId: string, opts: { reopened?: boolean } = {}): Promise<string | null> {
+  const instanceId = opts.reopened ? `${ticketId}-r${Date.now()}` : ticketId;
+  try {
+    await env.TICKET_WORKFLOW.create({ id: instanceId, params: { ticketId, reopened: opts.reopened ?? false } });
+    await env.DB.prepare("UPDATE tickets SET workflow_instance_id = ? WHERE id = ?").bind(instanceId, ticketId).run();
+    return instanceId;
+  } catch (e) {
+    console.error("[workflow] could not start for", ticketId, e);
+    return null;
+  }
 }
 
 export type BoardEvent =

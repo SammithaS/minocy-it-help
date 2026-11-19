@@ -18,6 +18,7 @@ import { Route as AppArticlesIdRouteImport } from './routes/_app/articles/$id'
 import { Route as AppChatIndexRouteImport } from './routes/_app/chat/index'
 import { Route as AppChatSessionIdRouteImport } from './routes/_app/chat/$sessionId'
 import { Route as AppConsoleIndexRouteImport } from './routes/_app/console/index'
+import { Route as AppConsoleOutboxRouteImport } from './routes/_app/console/outbox'
 import { Route as AppConsoleSettingsRouteImport } from './routes/_app/console/settings'
 import { Route as AppTicketsIndexRouteImport } from './routes/_app/tickets/index'
 import { Route as AppTicketsNumberRouteImport } from './routes/_app/tickets/$number'
@@ -66,6 +67,11 @@ const AppConsoleIndexRoute = AppConsoleIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppConsoleRoute,
 } as any)
+const AppConsoleOutboxRoute = AppConsoleOutboxRouteImport.update({
+  id: '/outbox',
+  path: '/outbox',
+  getParentRoute: () => AppConsoleRoute,
+} as any)
 const AppConsoleSettingsRoute = AppConsoleSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/console': typeof AppConsoleRouteWithChildren
   '/articles/$id': typeof AppArticlesIdRoute
   '/chat/$sessionId': typeof AppChatSessionIdRoute
+  '/console/outbox': typeof AppConsoleOutboxRoute
   '/console/settings': typeof AppConsoleSettingsRoute
   '/tickets/$number': typeof AppTicketsNumberRoute
   '/articles/': typeof AppArticlesIndexRoute
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/articles/$id': typeof AppArticlesIdRoute
   '/chat/$sessionId': typeof AppChatSessionIdRoute
+  '/console/outbox': typeof AppConsoleOutboxRoute
   '/console/settings': typeof AppConsoleSettingsRoute
   '/tickets/$number': typeof AppTicketsNumberRoute
   '/articles': typeof AppArticlesIndexRoute
@@ -115,6 +123,7 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/_app/articles/$id': typeof AppArticlesIdRoute
   '/_app/chat/$sessionId': typeof AppChatSessionIdRoute
+  '/_app/console/outbox': typeof AppConsoleOutboxRoute
   '/_app/console/settings': typeof AppConsoleSettingsRoute
   '/_app/tickets/$number': typeof AppTicketsNumberRoute
   '/_app/articles/': typeof AppArticlesIndexRoute
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
     | '/console'
     | '/articles/$id'
     | '/chat/$sessionId'
+    | '/console/outbox'
     | '/console/settings'
     | '/tickets/$number'
     | '/articles/'
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/'
     | '/articles/$id'
     | '/chat/$sessionId'
+    | '/console/outbox'
     | '/console/settings'
     | '/tickets/$number'
     | '/articles'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/articles/$id'
     | '/_app/chat/$sessionId'
+    | '/_app/console/outbox'
     | '/_app/console/settings'
     | '/_app/tickets/$number'
     | '/_app/articles/'
@@ -234,6 +246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppConsoleIndexRouteImport
       parentRoute: typeof AppConsoleRoute
     }
+    '/_app/console/outbox': {
+      id: '/_app/console/outbox'
+      path: '/outbox'
+      fullPath: '/console/outbox'
+      preLoaderRoute: typeof AppConsoleOutboxRouteImport
+      parentRoute: typeof AppConsoleRoute
+    }
     '/_app/console/settings': {
       id: '/_app/console/settings'
       path: '/settings'
@@ -259,11 +278,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppConsoleRouteChildren {
+  AppConsoleOutboxRoute: typeof AppConsoleOutboxRoute
   AppConsoleSettingsRoute: typeof AppConsoleSettingsRoute
   AppConsoleIndexRoute: typeof AppConsoleIndexRoute
 }
 
 const AppConsoleRouteChildren: AppConsoleRouteChildren = {
+  AppConsoleOutboxRoute: AppConsoleOutboxRoute,
   AppConsoleSettingsRoute: AppConsoleSettingsRoute,
   AppConsoleIndexRoute: AppConsoleIndexRoute,
 }

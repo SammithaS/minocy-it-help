@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Check, Lock, MessageSquare, RotateCcw, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { InlineMd } from "@/components/inline-md";
+import { ConfirmCard, StaffActions } from "@/components/tickets/ticket-actions";
 import { SlaChip } from "@/components/tickets/ticket-row";
 import { PriorityBadge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,10 @@ const EVENT_LABEL: Record<string, string> = {
   resolved: "Resolved",
   closed: "Closed",
   sla_reminder: "SLA reminder sent",
-  escalated: "Escalated",
+  escalated: "SLA breached — escalated to IT admin",
+  triaged: "Triaged by the Triage agent",
+  confirmation: "Employee answered “Did this fix it?”",
+  sla_breached: "SLA breached",
 };
 
 function TicketPage() {
@@ -91,6 +95,8 @@ function TicketPage() {
           {t.assignee?.name ? ` · assigned to ${t.assignee.name}` : ""}
         </p>
       </header>
+
+      {staff ? <StaffActions ticket={t} meId={me.user.id} /> : <ConfirmCard ticket={t} />}
 
       <Card className="space-y-4">
         <p className="whitespace-pre-line text-[15px] leading-relaxed">{t.description}</p>

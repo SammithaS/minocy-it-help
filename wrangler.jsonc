@@ -25,16 +25,28 @@
   "durable_objects": {
     "bindings": [
       { "name": "SUPPORT_AGENT", "class_name": "SupportAgent" },
-      { "name": "TICKET_BOARD", "class_name": "TicketBoard" }
+      { "name": "TICKET_BOARD", "class_name": "TicketBoard" },
+      { "name": "TRIAGE_AGENT", "class_name": "TriageAgent" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["SupportAgent"] },
-    { "tag": "v2", "new_sqlite_classes": ["TicketBoard"] }
+    { "tag": "v2", "new_sqlite_classes": ["TicketBoard"] },
+    { "tag": "v3", "new_sqlite_classes": ["TriageAgent"] }
   ],
+  // Durable ticket lifecycle: notify → SLA timers → wait for resolution → confirm → close.
+  "workflows": [{ "name": "ticket-workflow", "binding": "TICKET_WORKFLOW", "class_name": "TicketWorkflow" }],
+  // Cloudflare Email Service: team mailboxes must be verified destination addresses (free).
+  "send_email": [{ "name": "EMAIL" }],
+  // Daily digest to IT admins at 09:00 IST (03:30 UTC).
+  "triggers": { "crons": ["30 3 * * *"] },
   "vars": {
     "APP_URL": "http://localhost:5173",
-    "EMAIL_FROM": "help@example.com"
+    "EMAIL_FROM": "help@minocy.example",
+    // "log" = render + store in the console Outbox only (no domain needed).
+    // "live" = team mail via Email Service, employee mail via Resend (needs a domain; see docs).
+    "EMAIL_TRANSPORT": "log",
+    // Replies to ticket+INC-1031@<INBOUND_DOMAIN> become ticket comments (Email Routing → email()).
+    "INBOUND_DOMAIN": "minocy.example"
   }
-  // Later phases add: workflows, EMAIL, cron triggers.
 }

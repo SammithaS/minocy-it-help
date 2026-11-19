@@ -23,6 +23,11 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-0000",
             APP_URL: "http://localhost",
+            // Never use real keys or send real mail from tests (overrides .dev.vars).
+            GOOGLE_GENERATIVE_AI_API_KEY: "",
+            RESEND_API_KEY: "",
+            IT_ADMIN_EMAIL: "",
+            EMAIL_TRANSPORT: "log",
           },
         },
       }),

@@ -3,6 +3,7 @@ import { logger } from "hono/logger";
 import { authRoutes } from "./auth";
 import { requireRole, sessionMiddleware, type HonoEnv } from "./context";
 import { kbRoutes } from "./kb";
+import { publicRoutes } from "./public";
 import { consoleRoutes, ticketRoutes } from "./tickets";
 
 export const api = new Hono<HonoEnv>()
@@ -19,6 +20,7 @@ export const api = new Hono<HonoEnv>()
     const r = await stub.pingSpecialist("ping");
     return c.json({ ...r, ms: Date.now() - started }, r.status === "completed" ? 200 : 500);
   })
+  .route("/", publicRoutes)
   .route("/", authRoutes)
   .route("/", kbRoutes)
   .route("/", ticketRoutes)

@@ -7,6 +7,9 @@ export interface Secrets {
   AI_GATEWAY_ID?: string;
   GEMINI_MODEL?: string;
   GEMINI_FALLBACK_MODEL?: string;
+  /** Back-office agent budgets (runs per 24 h) and timings. */
+  TRIAGE_DAILY_BUDGET?: string;
+  CONFIRM_TIMEOUT_DAYS?: string;
   IT_ADMIN_EMAIL?: string;
 }
 

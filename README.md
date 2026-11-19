@@ -45,7 +45,7 @@ Sign in with a seeded account — no real email needed locally. The 6-digit code
 ## Layout
 
 ```
-src/            Worker: index.ts (entry), api/ (Hono), agents/ (supervisor, router, rules, tools, specialists/), durable/ (TicketBoard), db/, lib/ (auth, llm, tickets, sla), email/
+src/            Worker: index.ts (fetch, email, scheduled), api/, agents/ (supervisor, router, specialists/, triage-agent), workflows/ (TicketWorkflow), durable/ (TicketBoard), email/ (templates, send, inbound, digest), db/, lib/
 web/src/        React 19 + TanStack Router/Query + Tailwind v4 (Option B design tokens in styles.css)
 migrations/     D1 migrations (drizzle-kit)
 src/rag/        kb-sections.ts (parse + chunk), embed.ts, rrf.ts, search.ts (hybrid search)
@@ -65,4 +65,14 @@ Cloudflare Workers · Hono + Zod · D1 + Drizzle · Better Auth (email OTP) · R
 for p in "category string" "section string" "os_windows boolean" "os_macos boolean" "os_linux boolean"; do
   set -- $p; pnpm exec wrangler vectorize create-metadata-index it-kb --property-name=$1 --type=$2
 done
+```
+
+## Email
+
+`EMAIL_TRANSPORT=log` (default) renders every email and stores it in the admin **Outbox** (`/console/outbox`) — no domain or accounts needed. For real sending, set up a domain on Cloudflare (Email Routing + verified team mailboxes) and Resend, then set `EMAIL_TRANSPORT=live`.
+
+Simulate inbound email locally:
+
+```bash
+curl -X POST --data-binary @reply.eml "http://localhost:5173/cdn-cgi/handler/email?from=ananya.sharma@minocy.example&to=ticket%2BINC-1004@minocy.example"
 ```
