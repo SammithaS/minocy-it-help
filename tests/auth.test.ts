@@ -94,6 +94,25 @@ describe("api", () => {
     expect(results).toHaveLength(0);
   });
 
+  it("guards support-agent conversations by session owner", async () => {
+    const sid = "11111111-2222-4333-8444-555555555555";
+    // Signed out → 401; malformed id → 404.
+    expect((await call(`/agents/support-agent/${sid}/get-messages`)).status).toBe(401);
+    expect((await call(`/agents/support-agent/not-a-uuid`)).status).toBe(404);
+
+    await seedUser("ua", "owner@minocy.example", "employee");
+    await seedUser("ub", "other@minocy.example", "employee");
+    await env.DB.prepare("INSERT INTO chat_sessions (id, user_id) VALUES (?, 'ua')").bind(sid).run();
+    const other = await signIn("other@minocy.example");
+    expect((await call(`/agents/support-agent/${sid}/get-messages`, { headers: { Cookie: other } })).status).toBe(403);
+
+    const owner = await signIn("owner@minocy.example");
+    const res = await call(`/agents/support-agent/${sid}/get-messages`, { headers: { Cookie: owner } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+    await env.DB.exec("DELETE FROM chat_sessions;");
+  });
+
   it("ignores attempts to set role through sign-in input", async () => {
     await seedUser("u3", "emp2@minocy.example", "employee");
     const cookie = await signIn("emp2@minocy.example");

@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
 import { AppWindow, ArrowRight, KeyRound, Mail, Printer, Ticket, Wifi } from "lucide-react";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
@@ -23,6 +24,15 @@ function greeting() {
 function Home() {
   const { me } = Route.useRouteContext();
   const first = me.user.name.split(" ")[0];
+  const navigate = useNavigate();
+  const [ask, setAsk] = useState("");
+  const startChat = (q: string) => {
+    if (q.trim()) void navigate({ to: "/chat", search: { q: q.trim() } });
+  };
+  const onAsk = (e: FormEvent) => {
+    e.preventDefault();
+    startChat(ask);
+  };
 
   return (
     <div className="space-y-8">
@@ -38,20 +48,21 @@ function Home() {
           </h1>
           <form
             className="mt-6 flex items-center gap-2 rounded-[18px] bg-white p-2 shadow-chat"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={onAsk}
           >
             <label htmlFor="ask" className="sr-only">
               Describe your problem
             </label>
             <input
               id="ask"
-              disabled
-              placeholder="The assistant arrives in Phase 3…"
+              value={ask}
+              onChange={(e) => setAsk(e.target.value)}
+              placeholder="e.g. My Wi-Fi keeps dropping"
               className="min-h-11 min-w-0 flex-1 bg-transparent px-3 text-[15px] text-[#17262A] placeholder:text-[#55666B] focus:outline-none"
             />
             <button
               type="submit"
-              disabled
+              disabled={!ask.trim()}
               className="min-h-11 rounded-full bg-[#17262A] px-5 text-sm font-bold text-white disabled:opacity-60"
             >
               Ask
@@ -59,9 +70,14 @@ function Home() {
           </form>
           <div className="mt-4 flex flex-wrap gap-2">
             {["Wi-Fi keeps dropping", "VPN timeout", "Laptop is slow"].map((chip) => (
-              <span key={chip} className="rounded-full bg-white/15 px-3.5 py-2 text-[13px] font-semibold text-white">
+              <button
+                key={chip}
+                type="button"
+                onClick={() => startChat(chip)}
+                className="min-h-9 rounded-full bg-white/15 px-3.5 text-[13px] font-semibold text-white hover:bg-white/25"
+              >
                 {chip}
-              </span>
+              </button>
             ))}
           </div>
         </div>

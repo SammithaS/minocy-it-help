@@ -5,6 +5,8 @@ export interface Secrets {
   GOOGLE_GENERATIVE_AI_API_KEY?: string;
   AI_GATEWAY_ACCOUNT_ID?: string;
   AI_GATEWAY_ID?: string;
+  GEMINI_MODEL?: string;
+  GEMINI_FALLBACK_MODEL?: string;
   IT_ADMIN_EMAIL?: string;
 }
 

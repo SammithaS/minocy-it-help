@@ -10,7 +10,7 @@ Requirements: Node 22+ and pnpm 9.
 
 ```bash
 pnpm install
-cp .dev.vars.example .dev.vars   # then set BETTER_AUTH_SECRET to a long random string
+cp .dev.vars.example .dev.vars   # set BETTER_AUTH_SECRET, and GOOGLE_GENERATIVE_AI_API_KEY (free, aistudio.google.com)
 pnpm db:reset                    # apply migrations + seed local D1
 pnpm exec wrangler login         # once; Vectorize + Workers AI run on your (free) account
 pnpm exec wrangler vectorize create it-kb --preset=@cf/baai/bge-base-en-v1.5   # once, plus metadata indexes (see docs)
@@ -45,7 +45,7 @@ Sign in with a seeded account — no real email needed locally. The 6-digit code
 ## Layout
 
 ```
-src/            Worker: index.ts (entry), api/ (Hono), db/ (Drizzle schema), lib/auth.ts (Better Auth), email/
+src/            Worker: index.ts (entry), api/ (Hono), agents/ (SupportAgent, rules, tools, prompt), db/, lib/ (auth, llm), email/
 web/src/        React 19 + TanStack Router/Query + Tailwind v4 (Option B design tokens in styles.css)
 migrations/     D1 migrations (drizzle-kit)
 src/rag/        kb-sections.ts (parse + chunk), embed.ts, rrf.ts, search.ts (hybrid search)
@@ -57,7 +57,7 @@ tests/          Vitest in the Workers pool
 
 ## Stack
 
-Cloudflare Workers · Hono + Zod · D1 + Drizzle · Better Auth (email OTP) · React 19 + Vite · TanStack Router & Query · Tailwind CSS v4 · Vitest (Workers pool) · Vectorize + Workers AI embeddings (bge-base-en-v1.5) · promptfoo. Coming next: Agents SDK + AI SDK with Gemini via AI Gateway (Phase 3), Durable Objects + Workflows + Email (Phases 4–5).
+Cloudflare Workers · Hono + Zod · D1 + Drizzle · Better Auth (email OTP) · React 19 + Vite · TanStack Router & Query · Tailwind CSS v4 · Vitest (Workers pool) · Vectorize + Workers AI embeddings (bge-base-en-v1.5) · promptfoo. Agents SDK (`AIChatAgent`) + AI SDK 7 · Gemini via AI Gateway → Workers AI fallback. Coming next: Durable Objects + Workflows + Email (Phases 4–5).
 
 ### One-time Vectorize metadata indexes
 

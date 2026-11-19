@@ -1,6 +1,9 @@
 GOOGLE_GENERATIVE_AI_API_KEY=
-AI_GATEWAY_ACCOUNT_ID=
+# AI Gateway id; empty = the auto-created "default" gateway (account comes from the AI binding)
 AI_GATEWAY_ID=
+# Optional model overrides
+GEMINI_MODEL=
+GEMINI_FALLBACK_MODEL=
 RESEND_API_KEY=
 EMAIL_FROM=help@yourdomain
 BETTER_AUTH_SECRET=change-me-to-a-long-random-string

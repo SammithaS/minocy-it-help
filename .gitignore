@@ -12,3 +12,4 @@ playwright-report
 # promptfoo
 .promptfoo
 evals/results
+.tanstack

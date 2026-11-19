@@ -22,9 +22,13 @@
   // and scripts use the real (free-tier) services on your Cloudflare account.
   "vectorize": [{ "binding": "VECTORIZE", "index_name": "it-kb", "remote": true }],
   "ai": { "binding": "AI", "remote": true },
+  "durable_objects": {
+    "bindings": [{ "name": "SUPPORT_AGENT", "class_name": "SupportAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SupportAgent"] }],
   "vars": {
     "APP_URL": "http://localhost:5173",
     "EMAIL_FROM": "help@example.com"
   }
-  // Later phases add: SUPPORT_AGENT, TICKET_BOARD, workflows, EMAIL, cron triggers.
+  // Later phases add: TICKET_BOARD, workflows, EMAIL, cron triggers.
 }
