@@ -44,6 +44,9 @@ export default defineConfig(async () => {
     test: {
       include: ["tests/**/*.test.ts"],
       setupFiles: ["./tests/apply-migrations.ts"],
+      // Files share D1 and the Workflow bindings (workflow introspection sees every new instance), so a
+      // ticket raised in one file must not show up in another's assertions: run files one at a time.
+      fileParallelism: false,
     },
   };
 });
