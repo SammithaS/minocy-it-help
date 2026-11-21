@@ -1,0 +1,85 @@
+# Routing eval: 60 realistic first messages → the agent the supervisor should hand off to.
+# Rules route most of them (free, instant); unclear ones go to the supervisor model, which picks a
+# hand-off tool. Metric: routed (right agent); the report also splits accuracy by rules vs model.
+# Run: pnpm eval routing   (LLM-routed cases use your Gemini key / Workers AI)
+description: Supervisor routing (rules → model)
+
+prompts:
+  - "{{message}}"
+
+providers:
+  - file://providers/router.ts
+
+defaultTest:
+  assert:
+    - type: javascript
+      metric: routed
+      value: "JSON.parse(output).agent === context.vars.expected"
+
+tests:
+  # ── troubleshooting → Knowledge agent ──
+  - vars: { message: "my wifi keeps dropping every few minutes", expected: knowledge }
+  - vars: { message: "laptop is super slow since this morning", expected: knowledge }
+  - vars: { message: "VPN times out when I'm at home", expected: knowledge }
+  - vars: { message: "outlook isn't syncing my new emails", expected: knowledge }
+  - vars: { message: "teams camera shows black screen", expected: knowledge }
+  - vars: { message: "printer says paper jam but there is no paper stuck", expected: knowledge }
+  - vars: { message: "monitor not detected when I use the dock", expected: knowledge }
+  - vars: { message: "onedrive shows sync pending forever", expected: knowledge }
+  - vars: { message: "excel keeps crashing when I open big files", expected: knowledge }
+  - vars: { message: "bluetooth headset won't pair", expected: knowledge }
+  - vars: { message: "laptop battery not charging", expected: knowledge }
+  - vars: { message: "screen asks for bitlocker recovery key", expected: knowledge }
+  - vars: { message: "can't open the shared drive", expected: knowledge }
+  - vars: { message: "got a weird email asking for my login", expected: knowledge }
+  - vars: { message: "new phone, need to move my authenticator", expected: knowledge }
+  - vars: { message: "how do I install software", expected: knowledge }
+  - vars: { message: "wifi nahi chal raha", expected: knowledge }
+  - vars: { message: "laptop bahut slow hai yaar", expected: knowledge }
+  - vars: { message: "mic not working in teams calls", expected: knowledge }
+  - vars: { message: "shared calendar not showing up", expected: knowledge }
+  - vars: { message: "printer", expected: knowledge }
+  - vars: { message: "outlook", expected: knowledge }
+  - vars: { message: "vpn", expected: knowledge }
+  - vars: { message: "slow", expected: knowledge }
+  # ── explicit ask for a person / ticket, safety → Ticket agent ──
+  - vars: { message: "can I talk to a person please", expected: ticket }
+  - vars: { message: "just raise a ticket for me", expected: ticket }
+  - vars: { message: "I want to speak to someone in IT", expected: ticket }
+  - vars: { message: "my laptop battery is swollen", expected: ticket }
+  - vars: { message: "spilled coffee on my keyboard", expected: ticket }
+  - vars: { message: "there's a burning smell from my charger", expected: ticket }
+  - vars: { message: "open a ticket, the whole floor has no internet", expected: ticket }
+  - vars: { message: "please call me", expected: ticket }
+  - vars: { message: "I need a new laptop, mine is 5 years old", expected: ticket }
+  - vars: { message: "my mouse is broken, need a replacement", expected: ticket }
+  # ── access → Access agent ──
+  - vars: { message: "I need Figma access", expected: access }
+  - vars: { message: "can I get access to Jira for the new project", expected: access }
+  - vars: { message: "requesting a Salesforce licence", expected: access }
+  - vars: { message: "access denied when opening the finance drive", expected: access }
+  - vars: { message: "I don't have access to GitHub", expected: access }
+  - vars: { message: "please give me permission for Tally", expected: access }
+  - vars: { message: "need access to an app", expected: access }
+  - vars: { message: "figma", expected: access }
+  # ── password / account → Password reset ──
+  - vars: { message: "I forgot my password", expected: password }
+  - vars: { message: "I'm locked out of my account", expected: password }
+  - vars: { message: "need to reset my password", expected: password }
+  - vars: { message: "my password expired", expected: password }
+  - vars: { message: "account locked after too many attempts", expected: password }
+  - vars: { message: "password", expected: password }
+  # ── ticket status → Ticket status ──
+  - vars: { message: "what's the status of INC-1031?", expected: status }
+  - vars: { message: "any update on my ticket", expected: status }
+  - vars: { message: "show my open tickets", expected: status }
+  - vars: { message: "is REQ-1004 approved yet", expected: status }
+  - vars: { message: "progress on my request?", expected: status }
+  - vars: { message: "INC1002", expected: status }
+  # ── small talk → Assistant ──
+  - vars: { message: "hi", expected: chat }
+  - vars: { message: "thanks!", expected: chat }
+  - vars: { message: "good morning", expected: chat }
+  - vars: { message: "ok", expected: chat }
+  - vars: { message: "hello there", expected: chat }
+  - vars: { message: "bye", expected: chat }

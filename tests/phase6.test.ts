@@ -7,6 +7,7 @@ import type { AppEnv } from "../src/env";
 import {
   decideAccessRequest,
   extractJustification,
+  isGenericRequest,
   loadCatalog,
   matchApplications,
   resolveAccessRequest,
@@ -144,6 +145,14 @@ describe("Access agent logic", () => {
     const r = await resolveAccessRequest(E, { requesterId: "e1", userMessages: ["I need figma and jira"] }, pick);
     expect(pick).toHaveBeenCalledOnce();
     expect(r).toMatchObject({ applicationId: "app-figma", method: "llm", justification: "Designing the onboarding flow" });
+  });
+
+  it("asks which app without a model call when the message names nothing (e2e finding)", async () => {
+    const pick = vi.fn();
+    const r = await resolveAccessRequest(E, { requesterId: "e1", userMessages: ["I need access to an app"] }, pick);
+    expect(pick).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ applicationId: null, method: "none" });
+    expect(isGenericRequest("can I get access to the design tool")).toBe(false); // the model can map this one
   });
 
   it("falls back to the app's owner team when there's no manager on file", async () => {

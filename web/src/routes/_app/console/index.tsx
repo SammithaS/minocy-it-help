@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { BellRing, Inbox, Search, X } from "lucide-react";
+import { BellRing, Inbox, Plug, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { TicketRow } from "@/components/tickets/ticket-row";
@@ -83,7 +83,10 @@ function Console() {
             {me.teams.length > 0 && ` · ${me.teams.map((t) => t.name).join(", ")}`}
           </p>
         </div>
-        <div className="flex gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm">
+          <Link to="/console/connect" className="hidden min-h-11 items-center gap-1.5 rounded-full px-3 font-bold text-brand-700 hover:bg-brand-50 sm:inline-flex">
+            <Plug className="size-4" /> Connect Claude
+          </Link>
           <Stat label={search.status === "open" ? "Open" : "Shown"} value={tickets.length} />
           <Stat label="Overdue" value={breached} tone={breached ? "critical" : undefined} />
         </div>

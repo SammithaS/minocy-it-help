@@ -8,6 +8,7 @@ import { z } from "zod";
 import { PRIORITIES } from "../db/schema";
 import { articleInputSchema, nextArticleId, validateArticle, type ArticleMeta } from "../lib/kb-index";
 import { TICKET_CATEGORIES } from "../org-config";
+import { createApiToken } from "../mcp/itops";
 import { saveRevision } from "../workflows/kb-reindex-workflow";
 import { requireRole, type HonoEnv } from "./context";
 
@@ -193,6 +194,30 @@ export const consoleAdminRoutes = new Hono<HonoEnv>()
       .bind(c.get("user")!.id, Date.now(), c.req.valid("param").id)
       .first();
     return r ? c.json({ ok: true }) : c.json({ ok: false, error: "This proposal was already decided." }, 409);
+  })
+
+  // ───────────── personal access tokens for the IT Ops MCP server ─────────────
+  .get("/console/tokens", requireRole("agent", "admin"), async (c) => {
+    const { results } = await c.env.DB.prepare(
+      "SELECT id, name, prefix, created_at, last_used_at FROM api_tokens WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC",
+    )
+      .bind(c.get("user")!.id)
+      .all();
+    return c.json({ tokens: results, mcpUrl: `${c.env.APP_URL}/mcp` });
+  })
+  .post("/console/tokens", requireRole("agent", "admin"), zValidator("json", z.object({ name: z.string().trim().min(2).max(60) })), async (c) => {
+    const user = c.get("user")!;
+    const active = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM api_tokens WHERE user_id = ? AND revoked_at IS NULL").bind(user.id).first<{ n: number }>();
+    if ((active?.n ?? 0) >= 5) return c.json({ error: "You already have 5 active tokens. Revoke one first." }, 400);
+    const { id, token } = await createApiToken(c.env, user.id, c.req.valid("json").name);
+    // The only time the token is ever shown.
+    return c.json({ id, token }, 201);
+  })
+  .delete("/console/tokens/:id", requireRole("agent", "admin"), uuidParam, async (c) => {
+    const r = await c.env.DB.prepare("UPDATE api_tokens SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL RETURNING id")
+      .bind(Date.now(), c.req.valid("param").id, c.get("user")!.id)
+      .first();
+    return r ? c.json({ ok: true }) : c.json({ error: "not_found" }, 404);
   })
 
   // ───────────── analytics ─────────────

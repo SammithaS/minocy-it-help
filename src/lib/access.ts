@@ -159,6 +159,22 @@ export function extractJustification(text: string, app: CatalogApp): string {
   return meaningful.split(/\s+/).filter(Boolean).length >= 3 ? text.trim().slice(0, 1000) : "";
 }
 
+const GENERIC_WORDS = new Set(
+  "i im i'm need needs want wants would like to get give me my access an a the some app apps application applications software tool tools system systems account please pls can could request requesting permission permissions licence license new for".split(" "),
+);
+/**
+ * "I need access to an app" names nothing a model could match — ask which app directly instead of
+ * spending a model call (and its latency) on a guess.
+ */
+export function isGenericRequest(text: string): boolean {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z' ]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => GENERIC_WORDS.has(w));
+}
+
 export async function resolveAccessRequest(env: AppEnv, input: ResolveAccessInput, pick: AccessPicker | null): Promise<AccessResolution> {
   const catalog = await loadCatalog(env.DB);
   const names = catalog.map((a) => a.name);
@@ -186,7 +202,7 @@ export async function resolveAccessRequest(env: AppEnv, input: ResolveAccessInpu
   if (inAll.length === 1) {
     app = inAll[0]!;
     justification = extractJustification(latest, app) || input.userMessages.slice(-6, -1).map((m) => extractJustification(m, app!)).find(Boolean) || "";
-  } else if (pick) {
+  } else if (pick && !(inAll.length === 0 && isGenericRequest(latest))) {
     method = "llm";
     try {
       const p = await pick({ messages: input.userMessages.slice(-6), catalog: inAll.length > 1 ? inAll : catalog });

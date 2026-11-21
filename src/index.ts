@@ -3,6 +3,7 @@ import { api } from "./api/app";
 import { sendDailyDigest } from "./email/digest";
 import { handleInboundEmail } from "./email/inbound";
 import type { AppEnv } from "./env";
+import { handleMcp } from "./mcp/itops";
 
 export { SupportAgent } from "./agents/support-agent";
 export { TicketBoard } from "./durable/ticket-board";
@@ -22,6 +23,8 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       return api.fetch(request, env, ctx);
     }
+    // IT Ops MCP server for Claude / IDEs (personal access tokens).
+    if (url.pathname === "/mcp") return handleMcp(request, env, ctx);
     const agent = await routeSupportAgent(request, env);
     if (agent) return agent;
     // Static assets / SPA are served by the assets binding before the Worker runs;

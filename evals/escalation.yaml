@@ -1,0 +1,40 @@
+# Escalation eval (deterministic): scripted guide conversations → whether the supervisor hands over to
+# IT, and why. Exercises the Phase 3 rules (all steps tried, 2 failures on HIGH, frustration ×2,
+# asked for a person, safety, fix didn't hold) and the cases that must NOT escalate.
+# Run: pnpm eval escalation   (no model calls)
+description: Escalation rules
+
+prompts:
+  - "{{message}}"
+
+providers:
+  - file://providers/escalation.ts
+
+defaultTest:
+  assert:
+    - type: javascript
+      metric: decision
+      value: |
+        const o = JSON.parse(output);
+        const want = context.vars.expected;
+        return want === "continue" ? o.kind !== "escalate" : o.kind === "escalate" && o.reason === want;
+
+tests:
+  # ── should keep troubleshooting ──
+  - vars: { steps: "", message: "", expected: continue }
+  - vars: { steps: "failed", message: "still not working", expected: continue }
+  - vars: { steps: "failed,failed", priority: MEDIUM, message: "", expected: continue }
+  - vars: { steps: "failed,failed,failed", priority: LOW, message: "ok next", expected: continue }
+  - vars: { steps: "failed", history: "this is annoying", message: "", expected: continue }
+  - vars: { steps: "worked", message: "thanks!", expected: continue }
+  # ── should escalate ──
+  - vars: { steps: "failed,failed,failed,failed,failed,failed", message: "", expected: all_steps_tried }
+  - vars: { steps: "failed,failed", priority: HIGH, message: "", expected: failed_high_priority }
+  - vars: { steps: "failed,failed", priority: CRITICAL, message: "", expected: failed_high_priority }
+  - vars: { steps: "failed", history: "this is so frustrating", message: "useless, nothing works!!!", expected: frustration }
+  - vars: { steps: "failed", message: "can I talk to a person", expected: user_requested }
+  - vars: { steps: "", message: "just raise a ticket", expected: user_requested }
+  - vars: { steps: "failed", message: "my battery is swollen now", expected: safety }
+  - vars: { steps: "", message: "I spilled water on it", expected: safety }
+  - vars: { steps: "worked", message: "it's still not working again", expected: not_satisfied }
+  - vars: { steps: "worked", message: "same problem came back", expected: not_satisfied }

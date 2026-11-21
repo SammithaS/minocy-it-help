@@ -1,0 +1,102 @@
+# Ticket-quality eval: chats that ended in escalation → the Ticket agent's draft, graded by an LLM
+# judge (judge.ts, same model chain as the app) plus hard checks (category, priority floor, no secrets).
+# Run: pnpm eval ticket-quality   (2 model calls per case)
+description: Ticket agent drafts (LLM judge)
+
+prompts:
+  - "{{messages}}"
+
+providers:
+  - file://providers/ticket-writer.ts
+
+defaultTest:
+  options:
+    provider: file://providers/judge.ts
+  assert:
+    - type: llm-rubric
+      metric: judge
+      value: >-
+        This is an IT support ticket drafted from an employee's chat. What the drafter was given:
+        employee messages "{{messages}}"; self-help steps already tried (from the guide) "{{tried}}";
+        guide followed "{{article}}"; device "Dell Latitude 7440 (Windows, MIN-LT-0141)"; escalation reason "{{reason}}".
+        Mentioning any of those facts is correct, not invention.
+        Pass only if ALL hold: the title is specific (names the symptom, and the device or place when known), not generic like "Issue" or "Help needed";
+        the summary is 2-4 factual sentences an engineer can act on, says what happens and the impact, and invents nothing beyond the inputs above;
+        it contains no greeting, no passwords/codes, and no instructions to the employee.
+    - type: javascript
+      metric: category
+      value: "JSON.parse(output).category === context.vars.category"
+    - type: javascript
+      metric: priority
+      value: |
+        const rank = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
+        return rank[JSON.parse(output).priority] >= rank[context.vars.minPriority];
+    - type: javascript
+      metric: no-secrets
+      value: "!/\\b(password|otp|code)\\s*(is|:)\\s*\\S+|Hunter2|482913/i.test(output)"
+
+tests:
+  - vars:
+      messages: "my wifi keeps dropping every few minutes|It happens at my desk on floor 3 since Monday|still not working"
+      tried: "Turn Wi-Fi off and on→failed;Check you're on Minocy-Corp→failed;Restart the laptop→failed"
+      article: "KB-002|Wi-Fi keeps dropping or won't connect|network"
+      suggested: MEDIUM
+      reason: "All the self-help steps were tried"
+      category: network
+      minPriority: MEDIUM
+  - vars:
+      messages: "my laptop battery is swollen, the trackpad is lifting up"
+      tried: ""
+      article: ""
+      suggested: CRITICAL
+      reason: "Safety issue — stop using the device"
+      category: hardware
+      minPriority: CRITICAL
+  - vars:
+      messages: "VPN times out when working from home|home internet works fine|tried twice, same"
+      tried: "Check home internet→failed;Restart Minocy Secure Connect→failed"
+      article: "KB-003|VPN won't connect or times out|network"
+      suggested: MEDIUM
+      reason: "You asked to talk to the IT team"
+      category: network
+      minPriority: MEDIUM
+  - vars:
+      messages: "the whole sales team can't get into outlook since 10am|nobody can send mail"
+      tried: ""
+      article: "KB-006|Outlook not sending, receiving or syncing email|collaboration"
+      suggested: HIGH
+      reason: "This needs the IT team"
+      category: collaboration
+      minPriority: HIGH
+  - vars:
+      messages: "printer on floor 2 jams on every page|error 13.2 on the screen|I'd rather raise a ticket"
+      tried: "Open tray 2 and remove paper→failed"
+      article: "KB-008|Printer not printing, paper jam or scan to email|hardware"
+      suggested: LOW
+      reason: "You asked to talk to the IT team"
+      category: hardware
+      minPriority: LOW
+  - vars:
+      messages: "excel crashes every time I open the budget file|my password is Hunter2 if you need it|still crashing"
+      tried: "Open Excel in safe mode→failed;Repair Office→failed"
+      article: "KB-018|Office app crashing or freezing|software"
+      suggested: MEDIUM
+      reason: "All the self-help steps were tried"
+      category: software
+      minPriority: MEDIUM
+  - vars:
+      messages: "my laptop shows a bitlocker recovery screen after the update|I don't have the key"
+      tried: ""
+      article: "KB-013|BitLocker recovery screen at startup|identity"
+      suggested: HIGH
+      reason: "This needs the IT team"
+      category: identity
+      minPriority: HIGH
+  - vars:
+      messages: "teams camera black screen in every meeting|camera works in the windows camera app|this is so frustrating, nothing works!!!"
+      tried: "Pick the camera in Teams settings→failed;Close other apps using the camera→failed"
+      article: "KB-007|Teams calls - no sound, mic or camera not working|collaboration"
+      suggested: MEDIUM
+      reason: "This is taking too long"
+      category: collaboration
+      minPriority: MEDIUM

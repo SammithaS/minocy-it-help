@@ -14,10 +14,12 @@ export interface RouteDecision {
 }
 
 const TICKET_REF = /\b(INC|REQ)-?\d{3,6}\b/i;
-const PASSWORD = /\b(forgot|reset|change|expired?|locked)\b.{0,30}\b(password|passcode|account)\b|\b(password|account)\b.{0,20}\b(reset|expired|locked( out)?)\b|\blocked out\b/i;
+const PASSWORD = /\b(forgot|reset|change|expired?|locked)\b.{0,30}\b(password|passcode|account)\b|\b(password|account)\b.{0,20}\b(reset|expired|locked( out)?)\b|\blocked out\b|^\s*(password|passwd|pwd)\s*[?!.]*$/i;
 const ACCESS = /\b(need|want|get|request|grant|give me|requesting)\b.{0,25}\b(access|permission|permissions|licen[cs]e)\b|\baccess (to|for)\b|\b(access denied|don'?t have access|no access)\b/i;
 const STATUS = /\b(status|update|progress)\b.{0,30}\b(ticket|request|incident)\b|\b(my|any) (open )?(tickets|requests)\b/i;
-const SMALL_TALK = /^\s*(hi+|hello|hey|hii+|namaste|good (morning|afternoon|evening)|thanks?( you)?|thank u|ok(ay)?|cool|great|bye)[\s!.]*$/i;
+const SMALL_TALK = /^\s*(hi+|hello|hey|hii+|namaste|good (morning|afternoon|evening)|thanks?( you)?|thank u|ok(ay)?|cool|great|bye)(\s+(there|team|all|everyone))?[\s!.]*$/i;
+/** Asking for new or replacement equipment needs IT, not a self-help guide. */
+const EQUIPMENT = /\b(need|want|request(ing)?|get|order)\b.{0,25}\b(new|replacement|replace|another|spare)\b.{0,25}\b(laptop|mouse|keyboard|monitor|screen|headset|charger|adapter|dock|phone|webcam)\b|\b(laptop|mouse|keyboard|monitor|headset|charger|dock|webcam)\b.{0,30}\b(broken|cracked|dead|damaged)\b.{0,30}\b(need|replace|replacement|new)\b/i;
 const AFFIRMATIVE = /^\s*(yes|yeah|yep|ok(ay)?|sure|please|go ahead|do it|haan|ha|ji|raise it)\b/i;
 
 /**
@@ -32,6 +34,7 @@ export function routeByRules(text: string, s: SupportState): RouteDecision | nul
   }
   if (detect.safety(t)) return { agent: "ticket", method: "rules", reason: "safety issue" };
   if (detect.wantsHuman(t)) return { agent: "ticket", method: "rules", reason: "asked for IT / a ticket" };
+  if (EQUIPMENT.test(t)) return { agent: "ticket", method: "rules", reason: "equipment request" };
   if (s.escalationReason && !s.ticketNumber && AFFIRMATIVE.test(t)) return { agent: "ticket", method: "rules", reason: "agreed to a ticket" };
   if (TICKET_REF.test(t) || STATUS.test(t)) return { agent: "status", method: "rules", reason: "ticket status" };
   if (PASSWORD.test(t)) return { agent: "password", method: "rules", reason: "password / account" };

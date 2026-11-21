@@ -15,8 +15,9 @@ import { loadTicketContext } from "../lib/ticket-context";
 import { notifyBoard } from "../lib/tickets";
 import { embedPassages } from "../rag/embed";
 
-export const TICKETS_NAMESPACE = "tickets";
-const DUPLICATE_MIN_SCORE = 0.8;
+import { DUPLICATE_MIN_SCORE, TICKETS_NAMESPACE } from "./triage-config";
+
+export { DUPLICATE_MIN_SCORE, TICKETS_NAMESPACE };
 const DEFAULT_DAILY_BUDGET = 150;
 
 export interface TriageResult {

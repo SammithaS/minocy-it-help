@@ -1,0 +1,32 @@
+# Triage duplicate-detection eval: new tickets vs a pool of 10 recent ones (providers/triage.ts).
+# Same embedding model and 0.80 threshold as the Triage agent; cosine in memory (no Vectorize writes).
+# Metrics: duplicate (right duplicate found / none when there's none), plus precision-style "no false
+# duplicate" on the unrelated cases.
+# Run: pnpm eval triage   (Workers AI embeddings only)
+description: Triage duplicate detection (retrieval stage)
+
+prompts:
+  - "{{title}}"
+
+providers:
+  - file://providers/triage.ts
+
+defaultTest:
+  assert:
+    - type: javascript
+      metric: duplicate
+      value: "JSON.parse(output).duplicateOf === (context.vars.expected === 'none' ? null : context.vars.expected)"
+
+tests:
+  # ── same issue, different words → should be flagged ──
+  - vars: { title: "Wi-Fi disconnecting on 3rd floor", description: "My laptop loses Minocy-Corp Wi-Fi every few minutes at my desk on floor 3.", expected: INC-5001 }
+  - vars: { title: "VPN timeout from home", description: "Secure Connect keeps timing out when I connect from home.", expected: INC-5002 }
+  - vars: { title: "Outlook inbox not updating", description: "New emails don't show up in Outlook desktop, but they're in webmail.", expected: INC-5004 }
+  - vars: { title: "Teams video is black", description: "In Teams my camera shows only a black screen; other apps can use it.", expected: INC-5007 }
+  - vars: { title: "Asked for BitLocker key after BIOS update", description: "After the BIOS update this morning the laptop wants a recovery key.", expected: INC-5008 }
+  - vars: { title: "External monitors black on USB-C dock", description: "Both monitors stay black when I plug the laptop into the dock.", expected: INC-5010 }
+  # ── different problems → no duplicate ──
+  - vars: { title: "Excel crashes opening budget file", description: "Excel closes as soon as I open the Q3 budget workbook.", expected: none }
+  - vars: { title: "Need access to Salesforce", description: "Requesting a Salesforce licence for the new sales role.", expected: none }
+  - vars: { title: "Keyboard keys not working", description: "The E and R keys on my laptop keyboard stopped working.", expected: none }
+  - vars: { title: "Forgot my password", description: "I can't remember my password and I'm locked out.", expected: none }

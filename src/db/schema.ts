@@ -314,7 +314,7 @@ export const ticketComments = sqliteTable(
     visibility: text("visibility", { enum: ["public", "internal"] })
       .notNull()
       .default("public"),
-    source: text("source", { enum: ["portal", "console", "email", "chat", "system"] })
+    source: text("source", { enum: ["portal", "console", "email", "chat", "system", "mcp"] })
       .notNull()
       .default("portal"),
     createdAt: createdAt(),
@@ -500,4 +500,23 @@ export const agentRuns = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("agent_runs_agent_idx").on(t.agent, t.createdAt), index("agent_runs_session_idx").on(t.sessionId)],
+);
+
+/** Personal access tokens for the IT Ops MCP server (Claude / IDE). Only a SHA-256 hash is stored. */
+export const apiTokens = sqliteTable(
+  "api_tokens",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    /** First characters, to tell tokens apart in the list (e.g. "mit_3fa9…"). */
+    prefix: text("prefix").notNull(),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("api_tokens_user_idx").on(t.userId)],
 );

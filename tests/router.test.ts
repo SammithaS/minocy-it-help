@@ -49,6 +49,16 @@ describe("routeByRules", () => {
     expect(r("Still not working", guide)).toBe("knowledge");
   });
 
+  it("sends equipment requests to a ticket, bare 'password' to the reset flow, and greetings to chat (routing eval misses)", () => {
+    expect(r("I need a new laptop, mine is 5 years old")).toBe("ticket");
+    expect(r("my mouse is broken, need a replacement")).toBe("ticket");
+    expect(r("my laptop is slow")).toBe("knowledge");
+    expect(r("password")).toBe("password");
+    expect(r("Password?")).toBe("password");
+    expect(r("hello there")).toBe("chat");
+    expect(r("hi team!")).toBe("chat");
+  });
+
   it("leaves one-word / unclear messages for the model to route", () => {
     expect(r("printer")).toBeNull();
   });
