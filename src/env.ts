@@ -17,6 +17,15 @@ export interface Secrets {
   FOLLOW_UP_HOURS?: string;
   /** Knowledge-gap agent runs per 24 h (default 50). */
   KB_GAP_DAILY_BUDGET?: string;
+  /** Access connectors. GitHub: fine-grained token with Organization → Members: Read & write. */
+  GITHUB_TOKEN?: string;
+  /** Okta org domain (e.g. acme.okta.com) and an API token — users, password reset, group access. */
+  OKTA_DOMAIN?: string;
+  OKTA_API_TOKEN?: string;
+  /** Atlassian Cloud site (acme.atlassian.net), admin account email and its API token — Jira / Confluence access. */
+  ATLASSIAN_SITE?: string;
+  ATLASSIAN_EMAIL?: string;
+  ATLASSIAN_API_TOKEN?: string;
 }
 
 export type AppEnv = Env & Secrets;

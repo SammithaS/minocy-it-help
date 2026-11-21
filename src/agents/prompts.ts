@@ -66,7 +66,8 @@ function directive(action: NextAction, s: SupportState): string {
       return {
         rate_limited: `They've reached today's limit of self-service resets. Say so kindly and offer to raise a ticket with the Identity & Access team.`,
         disabled: `Their account is disabled, so self-service can't help. Offer to raise a ticket with the Identity & Access team.`,
-        no_account: `There's no directory account on file for them. Offer to raise a ticket with the Identity & Access team.`,
+        no_account: `They aren't in the company directory (Okta), so self-service can't reset it. Offer to raise a ticket with the Identity & Access team.`,
+        unavailable: `Self-service password reset isn't connected to the company directory right now. Offer to raise a ticket with the Identity & Access team.`,
         verify_failed: `We couldn't confirm the code (wrong too many times or expired). Say so kindly, don't blame them, and offer to raise a ticket with the Identity & Access team.`,
         error: `Self-service password reset couldn't finish. Apologise briefly and offer to raise a ticket with the Identity & Access team.`,
       }[action.reason] + ` If they agree, call askTicketAgent then createTicket. Never ask for their password.`;

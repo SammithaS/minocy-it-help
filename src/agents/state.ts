@@ -49,6 +49,9 @@ export interface AccessDraft {
   approverKind: "manager" | "owner_team" | "admin" | null;
   requiresApproval: boolean;
   ownerTeam: string | null;
+  /** E.g. "Your GitHub username" when the app's connector needs the employee's account name. */
+  usernameLabel: string | null;
+  externalUsername: string | null;
 }
 
 /** Self-service password reset progress. The code itself never touches state or the transcript. */
@@ -248,7 +251,7 @@ export type NextAction =
   | { kind: "password_confirm" }
   | { kind: "password_done"; maskedEmail: string; unlocked: boolean }
   | { kind: "password_cancelled" }
-  | { kind: "password_blocked"; reason: "rate_limited" | "disabled" | "no_account" | "verify_failed" | "error" };
+  | { kind: "password_blocked"; reason: "rate_limited" | "disabled" | "no_account" | "verify_failed" | "unavailable" | "error" };
 
 export interface TurnSignals {
   /** The latest user message text ("" when the turn was triggered by a tool result). */

@@ -35,18 +35,22 @@ export function AccessDraftCard({
 }: {
   draft: AccessDraft;
   busy: boolean;
-  onApprove: (justification: string) => Promise<string | null>;
+  onApprove: (justification: string, externalUsername: string | null) => Promise<string | null>;
   onCancel: () => void;
 }) {
   const [why, setWhy] = useState(draft.justification);
+  const [username, setUsername] = useState(draft.externalUsername ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ok = why.trim().length >= 10;
+  const needsUsername = !!draft.usernameLabel;
+  const isGithub = /github/i.test(draft.usernameLabel ?? "");
+  const usernameOk = !needsUsername || (isGithub ? /^(?!-)(?!.*--)[A-Za-z0-9-]{1,39}(?<!-)$/.test(username.trim()) : username.trim().length > 0);
+  const ok = why.trim().length >= 10 && usernameOk;
 
   async function send() {
     setSaving(true);
     setError(null);
-    const err = await onApprove(why.trim());
+    const err = await onApprove(why.trim(), needsUsername ? username.trim() : null);
     setSaving(false);
     if (err) setError(err);
   }
@@ -63,6 +67,22 @@ export function AccessDraftCard({
             : "Needs approval"
           : "No approval needed — set up straight away"}
       </p>
+      {needsUsername && (
+        <label className="mt-3 block text-xs font-bold text-muted">
+          {draft.usernameLabel}
+          <input
+            className={cn(field, "mt-1 min-h-11")}
+            value={username}
+            maxLength={39}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={isGithub ? "e.g. octocat" : ""}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          {isGithub && <span className="mt-1 block font-normal">GitHub will email you an invite to accept.</span>}
+          {username.trim() && !usernameOk && <span className="mt-1 block font-normal text-critical">That doesn&apos;t look like a GitHub username.</span>}
+        </label>
+      )}
       <label className="mt-3 block text-xs font-bold text-muted">
         Why do you need it?
         <textarea

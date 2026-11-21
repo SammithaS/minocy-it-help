@@ -12,6 +12,7 @@ import { z } from "zod";
 import { PRIORITIES } from "../db/schema";
 import type { AppEnv } from "../env";
 import { justificationSchema } from "../lib/access";
+import { GITHUB_USERNAME } from "../lib/connectors";
 import { chatFollowUp } from "../email/chat-messages";
 import { sendEmail } from "../email/send";
 import { chatModel } from "../lib/llm";
@@ -103,7 +104,8 @@ function forcedCard(action: NextAction, s: SupportState): { tool: ToolName; lead
       const d = s.accessDraft;
       if (!d) return null;
       const who = d.requiresApproval && d.approverName ? ` — ${d.approverName} will be asked to approve it` : "";
-      return { tool: "submitAccessRequest", lead: `Here's your request for **${d.applicationName}**${who}. ${d.justification ? "Check it and send it when you're happy." : "Add a line on why you need it, then send it."}` };
+      const needs = [d.justification ? null : "why you need it", d.usernameLabel ? d.usernameLabel.replace(/^Your /, "your ") : null].filter(Boolean).join(" and ");
+      return { tool: "submitAccessRequest", lead: `Here's your request for **${d.applicationName}**${who}. ${needs ? `Add ${needs}, then send it.` : "Check it and send it when you're happy."}` };
     }
     case "password_verify":
       return {
@@ -130,7 +132,7 @@ function fixedReply(action: NextAction): string | null {
     case "access_cancelled":
       return "No problem — I haven't sent anything. Ask me any time if you need access later.";
     case "password_done":
-      return `All set${action.unlocked ? " — your account is unlocked" : ""}. I've emailed a one-time link to ${action.maskedEmail} to choose your new password; it works once and expires in 30 minutes. After that, sign in on your laptop and in Minocy apps with the new password.`;
+      return `All set${action.unlocked ? " — your account is unlocked" : ""}. Okta has emailed a password reset link to ${action.maskedEmail}. Open it to choose your new password, then sign in everywhere with the new one.`;
     case "password_cancelled":
       return "Okay, I've cancelled the reset — nothing changed on your account.";
     default:
@@ -253,6 +255,8 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
               approverKind: out.approver?.kind ?? null,
               requiresApproval: out.requiresApproval,
               ownerTeam: out.ownerTeam,
+              usernameLabel: out.usernameLabel,
+              externalUsername: null,
             }
           : null,
     });
@@ -531,9 +535,16 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
   async updateAccessDraft(edit: unknown) {
     const s = this.state;
     if (!s.accessDraft) return { ok: false, error: "There's no open access request to edit." };
-    const parsed = z.object({ justification: justificationSchema }).safeParse(edit);
+    const parsed = z
+      .object({ justification: justificationSchema, externalUsername: z.string().trim().max(100).nullish() })
+      .safeParse(edit);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid reason" };
-    this.setState({ ...s, accessDraft: { ...s.accessDraft, justification: parsed.data.justification } });
+    const username = parsed.data.externalUsername || null;
+    if (s.accessDraft.usernameLabel) {
+      if (!username) return { ok: false, error: `Add ${s.accessDraft.usernameLabel.toLowerCase()}.` };
+      if (/github/i.test(s.accessDraft.usernameLabel) && !GITHUB_USERNAME.test(username)) return { ok: false, error: "That isn't a valid GitHub username." };
+    }
+    this.setState({ ...s, accessDraft: { ...s.accessDraft, justification: parsed.data.justification, externalUsername: username } });
     return { ok: true };
   }
 

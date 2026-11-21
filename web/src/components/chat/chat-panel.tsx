@@ -116,11 +116,11 @@ export function ChatPanel({
     return r.error ?? "That didn't work.";
   }
 
-  async function approveAccess(justification: string): Promise<string | null> {
+  async function approveAccess(justification: string, externalUsername: string | null): Promise<string | null> {
     if (pendingApproval?.type !== "tool-submitAccessRequest" || !pendingApproval.approval) return "This request has expired. Ask me again.";
-    if (justification !== state.accessDraft?.justification) {
-      const r = (await agent.call("updateAccessDraft", [{ justification }])) as { ok: boolean; error?: string };
-      if (!r.ok) return r.error ?? "Couldn't save your reason.";
+    if (justification !== state.accessDraft?.justification || externalUsername !== state.accessDraft?.externalUsername) {
+      const r = (await agent.call("updateAccessDraft", [{ justification, externalUsername }])) as { ok: boolean; error?: string };
+      if (!r.ok) return r.error ?? "Couldn't save your request.";
     }
     void addToolApprovalResponse({ id: pendingApproval.approval.id, approved: true });
     return null;
@@ -323,7 +323,7 @@ function Message({
   onAnswer: (part: ToolPart, outcome: StepOutcome) => void;
   onApproveTicket: React.ComponentProps<typeof TicketDraftCard>["onApprove"];
   onCancelTicket: () => void;
-  onApproveAccess: (justification: string) => Promise<string | null>;
+  onApproveAccess: (justification: string, externalUsername: string | null) => Promise<string | null>;
   onRespondApproval: (approved: boolean) => void;
   onCheckCode: (code: string) => Promise<string | null>;
   onGiveUpCode: () => void;

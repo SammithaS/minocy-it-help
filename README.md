@@ -38,7 +38,7 @@ Routing is **rules first** (`src/agents/router.ts`): 90 % of the routing eval is
 ## What's in it
 
 - **Portal** — hero ask box and quick-action tiles that hand off to the supervisor in a **docked chat** (full-screen sheet on phones); full-page chat with history; step-by-step guide cards; editable ticket draft card; access-request card; password-reset code and confirmation cards; 👍/👎 feedback; a 24 h follow-up; *My tickets & requests*.
-- **Back office** — `TicketWorkflow` (triage → team/employee email → SLA reminder at 75 % → escalation at 100 % → resolve → "Did this fix it?" → close/reopen), `AccessRequestWorkflow` (signed Approve/Reject links → mock provisioning), `KbReindexWorkflow`; inbound email (`help@` → ticket, `ticket+INC-…@` → comment); daily digest.
+- **Back office** — `TicketWorkflow` (triage → team/employee email → SLA reminder at 75 % → escalation at 100 % → resolve → "Did this fix it?" → close/reopen), `AccessRequestWorkflow` (signed Approve/Reject links → real provisioning through GitHub, Okta or Jira/Confluence → verify, or a ticket if it fails), `KbReindexWorkflow`; inbound email (`help@` → ticket, `ticket+INC-…@` → comment); daily digest.
 - **IT console** — live queue (WebSocket) with filters, SLA chips, ticket view with transcript and triage note, assign / start / waiting / resolve, routing & SLA settings, KB editor, knowledge-gap proposals with a diff, analytics, email Outbox, **Connect Claude**.
 - **Security** — email-OTP sign-in (no passwords), server-side ownership checks on every chat and ticket, approval cards for anything with side effects, signed expiring email links (GET shows, POST acts), secrets never stored or shown to the model, hashed MCP tokens.
 
@@ -68,7 +68,7 @@ Sign in with a seeded account — no real email needed locally. The 6-digit code
 
 | Role | Email |
 |---|---|
-| Employee | `ananya.sharma@minocy.example` (+7 more; `rohan.das@…` has a **locked** directory account for the reset demo, `meera.krishnan@…` already has Figma) |
+| Employee | `ananya.sharma@minocy.example` (+7 more) |
 | Manager (approves access) | `deepa.menon@…` (Finance, HR, Ops), `nikhil.bose@…` (Sales, Marketing), `lakshmi.pillai@…` (Design, Engineering) |
 | IT Agent | `arjun.mehta@minocy.example` (Network), `priya.nair@…` (Hardware), `rahul.verma@…` (Software), `sneha.iyer@…` (Identity & Access), `vikram.singh@…` (Collaboration) |
 | IT Admin | `admin@minocy.example`, plus your own address if you seed with `SEED_OWNER_EMAIL=you@example.com SEED_OWNER_NAME="Your Name" pnpm db:seed` |
@@ -104,7 +104,7 @@ Tools: `listMyTeamTickets` (status / priority / overdue / assigned-to-me filters
 
 `EMAIL_TRANSPORT=log` (default) renders every email and stores it in the admin **Outbox** (`/console/outbox`) — no domain or accounts needed. For real sending, set up a domain on Cloudflare (Email Routing + verified team mailboxes) and Resend, then set `EMAIL_TRANSPORT=live` (see [Deploy](#deploy)).
 
-Password-reset codes and set-password links are sent like any other email, but the Outbox keeps only their subject and recipient (admins mustn't read them); in `log` mode their text is printed in the `pnpm dev` terminal, like sign-in codes. Manager approval emails are normal Outbox entries — open one and click **Approve** to finish an access request locally.
+Password-reset codes are sent like any other email, but the Outbox keeps only their subject and recipient (admins mustn't read them); in `log` mode their text is printed in the `pnpm dev` terminal, like sign-in codes. The reset link itself comes from Okta. Manager approval emails are normal Outbox entries — open one and click **Approve** to finish an access request locally.
 
 Simulate inbound email locally:
 
@@ -190,6 +190,16 @@ pnpm exec wrangler secret put GOOGLE_GENERATIVE_AI_API_KEY
 pnpm exec wrangler secret put RESEND_API_KEY              # optional: sign-in codes + employee mail
 pnpm exec wrangler secret put IT_ADMIN_EMAIL              # optional: escalations + digest go here
 ```
+
+#### Connectors (real access, password reset and users)
+
+| Connector | Secrets | What it does |
+|---|---|---|
+| GitHub | `GITHUB_TOKEN` — fine-grained token for your org with **Organization → Members: Read and write** | Invites the requester (by GitHub username) to the org or a team; waits for them to accept |
+| Okta | `OKTA_DOMAIN` (e.g. `acme.okta.com`), `OKTA_API_TOKEN` | Adds people to app groups; password reset (unlock + Okta's own reset email); sign-in only for active Okta users, with name / department / manager synced from Okta |
+| Jira / Confluence | `ATLASSIAN_SITE` (e.g. `acme.atlassian.net`), `ATLASSIAN_EMAIL`, `ATLASSIAN_API_TOKEN` | Invites people to the site if needed and adds them to the product group (`jira-software-users`, `confluence-users`) |
+
+Set each with `pnpm exec wrangler secret put NAME` (you're prompted for the value). Then, in **Console → Settings → Apps & access**, add each app and pick its connector — e.g. *GitHub → organization `your-org`*. Only apps with a connector can be requested; failed grants become tickets for the app's team, and **Console → Access requests** shows every request with a Retry button.
 
 Optional tuning secrets/vars: `AI_GATEWAY_ID` (defaults to the auto-created `default` gateway),
 `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, `TRIAGE_DAILY_BUDGET`, `KB_GAP_DAILY_BUDGET`,

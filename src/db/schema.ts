@@ -49,6 +49,8 @@ export const user = sqliteTable("user", {
   location: text("location"),
   /** Line manager (approves access requests). Plain id, no FK, so seeding order doesn't matter. */
   managerId: text("manager_id"),
+  /** Okta user id when the person comes from Okta (profile synced at sign-in). */
+  oktaId: text("okta_id"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -380,9 +382,17 @@ export const applications = sqliteTable("applications", {
     .default(true),
   /** Other names people use ("sfdc", "finance drive"); matched before any model call. */
   aliases: text("aliases", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  /** How access is granted: "github" (org / team invite), "okta" or "atlassian" (group membership). Null = not requestable. */
+  connector: text("connector", { enum: ["github", "okta", "atlassian"] }),
+  /** Non-secret connector settings, e.g. {"org":"acme","team":"design"} or {"groupId":"00g…"}. Tokens are Worker secrets. */
+  connectorConfig: text("connector_config", { mode: "json" }).$type<Record<string, string>>().notNull().default(sql`'{}'`),
 });
 
-export const ACCESS_STATUSES = ["PENDING", "APPROVED", "REJECTED", "PROVISIONED", "EXPIRED"] as const;
+/**
+ * PENDING (waiting for approval) → APPROVED → PROVISIONING → PENDING_EXTERNAL (e.g. GitHub invite not yet
+ * accepted) → PROVISIONED; FAILED raises a ticket for the app's team. REJECTED / EXPIRED end without access.
+ */
+export const ACCESS_STATUSES = ["PENDING", "APPROVED", "PROVISIONING", "PENDING_EXTERNAL", "PROVISIONED", "FAILED", "REJECTED", "EXPIRED"] as const;
 export type AccessStatus = (typeof ACCESS_STATUSES)[number];
 
 export const accessRequests = sqliteTable(
@@ -402,6 +412,12 @@ export const accessRequests = sqliteTable(
     approverId: text("approver_id"),
     approverEmail: text("approver_email"),
     sessionId: text("session_id"),
+    /** The requester's account name in the target system (GitHub username). */
+    externalUsername: text("external_username"),
+    /** What the connector reported, e.g. "invited to acme (pending)" / "added to group Figma Users". */
+    provisionDetail: text("provision_detail"),
+    /** Ticket raised when provisioning failed. */
+    failureTicket: text("failure_ticket"),
     decisionNote: text("decision_note"),
     decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
     provisionedAt: integer("provisioned_at", { mode: "timestamp_ms" }),
@@ -428,23 +444,7 @@ export const appGrants = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.applicationId] })],
 );
 
-/**
- * Mock corporate directory (stands in for Entra ID / AD): account status for self-service password
- * reset. No password is ever stored here.
- */
-export const directoryAccounts = sqliteTable("directory_accounts", {
-  userId: text("user_id")
-    .primaryKey()
-    .references(() => user.id, { onDelete: "cascade" }),
-  username: text("username").notNull().unique(),
-  status: text("status", { enum: ["active", "locked", "disabled"] }).notNull().default("active"),
-  mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
-  lockedAt: integer("locked_at", { mode: "timestamp_ms" }),
-  passwordChangedAt: integer("password_changed_at", { mode: "timestamp_ms" }),
-  updatedAt: updatedAt(),
-});
-
-/** One self-service password reset attempt: email code → verified → approved → link used. */
+/** One self-service password reset attempt: email code → verified → approved → Okta reset email sent. */
 export const passwordResets = sqliteTable(
   "password_resets",
   {

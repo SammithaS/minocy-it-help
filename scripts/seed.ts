@@ -76,9 +76,6 @@ const grants: [user: string, app: string][] = [
   ["u-emp-1", "app-tally"],
 ];
 
-/** Mock directory: one locked account to demo self-service unlock. */
-const lockedAccounts = new Set(["u-emp-2"]);
-
 const q = (v: string | number | boolean | null | undefined): string => {
   if (v === null || v === undefined) return "NULL";
   if (typeof v === "number") return String(v);
@@ -94,7 +91,7 @@ const sql: string[] = [
   "PRAGMA defer_foreign_keys = on;",
   "DELETE FROM team_members; DELETE FROM devices; DELETE FROM routing_rules; DELETE FROM sla_policies;",
   "DELETE FROM app_grants; DELETE FROM access_requests; DELETE FROM applications; DELETE FROM teams;",
-  "DELETE FROM password_resets; DELETE FROM directory_accounts;",
+  "DELETE FROM password_resets;",
   "DELETE FROM session; DELETE FROM account; DELETE FROM verification;",
 ];
 
@@ -114,10 +111,6 @@ for (const u of users) {
   sql.push(
     `INSERT INTO user (id, name, email, email_verified, role, department, location, manager_id, created_at, updated_at) VALUES (${q(u.id)}, ${q(u.name)}, ${q(u.email.toLowerCase())}, 1, ${q(u.role)}, ${q(u.department)}, ${q(u.location)}, ${q(u.manager)}, ${now}, ${now})
 ON CONFLICT(id) DO UPDATE SET name=excluded.name, email=excluded.email, role=excluded.role, department=excluded.department, location=excluded.location, manager_id=excluded.manager_id, updated_at=excluded.updated_at;`,
-  );
-  const locked = lockedAccounts.has(u.id);
-  sql.push(
-    `INSERT INTO directory_accounts (user_id, username, status, must_change_password, locked_at, updated_at) VALUES (${q(u.id)}, ${q(u.email.split("@")[0]!.toLowerCase())}, ${q(locked ? "locked" : "active")}, 0, ${locked ? now : "NULL"}, ${now});`,
   );
   for (const teamId of u.teams ?? []) {
     sql.push(`INSERT INTO team_members (team_id, user_id) VALUES (${q(teamId)}, ${q(u.id)});`);

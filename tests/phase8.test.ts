@@ -65,7 +65,7 @@ beforeAll(async () => {
   const stmts = [
     "DELETE FROM kb_proposals", "DELETE FROM kb_revisions", "DELETE FROM kb_fts", "DELETE FROM kb_steps", "DELETE FROM kb_articles",
     "DELETE FROM feedback", "DELETE FROM notifications", "DELETE FROM agent_runs", "DELETE FROM chat_sessions", "DELETE FROM session", "DELETE FROM verification",
-    "DELETE FROM app_grants", "DELETE FROM access_requests", "DELETE FROM password_resets", "DELETE FROM directory_accounts", "DELETE FROM ticket_comments",
+    "DELETE FROM app_grants", "DELETE FROM access_requests", "DELETE FROM password_resets", "DELETE FROM ticket_comments",
     "DELETE FROM ticket_events", "DELETE FROM tickets", "DELETE FROM team_members", "DELETE FROM routing_rules", "DELETE FROM sla_policies", "DELETE FROM teams",
     "DELETE FROM devices", "DELETE FROM user",
     "INSERT INTO teams (id, name, mailbox) VALUES ('team-collab', 'Collaboration', 'col@team.example'), ('team-network', 'Network', 'net@team.example')",

@@ -7,7 +7,6 @@
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { decideAccessRequest, loadAccessContext } from "../lib/access";
-import { checkSetPasswordLink, setNewPassword } from "../lib/password-reset";
 import { confirmResolution } from "../lib/ticket-actions";
 import { verifyLink } from "../lib/tokens";
 import type { HonoEnv } from "./context";
@@ -134,40 +133,4 @@ export const publicRoutes = new Hono<HonoEnv>()
           ? `Rejected. We've let ${r.requester_name.split(" ")[0]} know.`
           : "This request was already decided — nothing changed.";
     return c.html(page("Thanks", html`<h1>${result === "approved" ? "Approved ✓" : result === "rejected" ? "Rejected" : "Already decided"}</h1><p>${text}</p>`));
-  })
-  // ── Self-service password reset: the one-time "set a new password" link (mock SSO page) ──
-  .get("/public/password", async (c) => {
-    const token = c.req.query("t") ?? "";
-    const link = await checkSetPasswordLink(c.env, token);
-    if (!link.ok) return c.html(page("Link not valid", expiredPassword(c.env.APP_URL, link.reason)), 410);
-    return c.html(page("Set a new password", passwordForm(token, link.username)));
-  })
-  .post("/public/password", async (c) => {
-    const form = await c.req.parseBody();
-    const token = String(form.t ?? "");
-    const r = await setNewPassword(c.env, token, String(form.password ?? ""), String(form.confirm ?? ""));
-    if (r.ok) return c.html(page("Password changed", html`<h1>Password changed ✓</h1><p>Sign in with your new password on your laptop and in Minocy apps. You can close this page.</p>`));
-    if (r.reason === "expired" || r.reason === "used") return c.html(page("Link not valid", expiredPassword(c.env.APP_URL, r.reason)), 410);
-    const link = await checkSetPasswordLink(c.env, token);
-    return c.html(page("Set a new password", passwordForm(token, link.ok ? link.username : "", r.message)), 400);
   });
-
-function passwordForm(token: string, username: string, error?: string) {
-  return html`<h1>Choose a new password</h1>
-    <p>For <strong>${username}</strong>. At least 12 characters, mixing three of: lowercase, uppercase, numbers, symbols.</p>
-    ${error ? html`<p class="err" role="alert">${error}</p>` : ""}
-    <form method="post" autocomplete="off">
-      <input type="hidden" name="t" value="${token}" />
-      <input type="hidden" name="username" value="${username}" autocomplete="username" />
-      <label for="pw">New password</label>
-      <input id="pw" type="password" name="password" minlength="12" maxlength="128" required autocomplete="new-password" />
-      <label for="pw2">Type it again</label>
-      <input id="pw2" type="password" name="confirm" minlength="12" maxlength="128" required autocomplete="new-password" />
-      <div class="row"><button class="yes">Set password</button></div>
-    </form>`;
-}
-
-function expiredPassword(appUrl: string, reason: "expired" | "used") {
-  return html`<h1>${reason === "used" ? "This link was already used" : "This link has expired"}</h1>
-    <p>For your security, reset links work once and only for 30 minutes. Ask again in <a href="${appUrl}/chat">IT Help</a>.</p>`;
-}

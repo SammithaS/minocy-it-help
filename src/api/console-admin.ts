@@ -8,6 +8,8 @@ import { z } from "zod";
 import { PRIORITIES } from "../db/schema";
 import { articleInputSchema, nextArticleId, validateArticle, type ArticleMeta } from "../lib/kb-index";
 import { TICKET_CATEGORIES } from "../org-config";
+import { loadCatalog } from "../lib/access";
+import { CONNECTOR_KINDS, validateConnector } from "../lib/connectors";
 import { createApiToken } from "../mcp/itops";
 import { saveRevision } from "../workflows/kb-reindex-workflow";
 import { requireRole, type HonoEnv } from "./context";
@@ -194,6 +196,103 @@ export const consoleAdminRoutes = new Hono<HonoEnv>()
       .bind(c.get("user")!.id, Date.now(), c.req.valid("param").id)
       .first();
     return r ? c.json({ ok: true }) : c.json({ ok: false, error: "This proposal was already decided." }, 409);
+  })
+
+  // ───────────── app catalog & access connectors (admin) ─────────────
+  .get("/console/apps", requireRole("admin"), async (c) => {
+    const teams = await c.env.DB.prepare("SELECT id, name FROM teams ORDER BY name").all<{ id: string; name: string }>();
+    return c.json({
+      apps: await loadCatalog(c.env.DB, { all: true }),
+      teams: teams.results,
+      // Which connector secrets are set (never their values).
+      configured: {
+        github: !!c.env.GITHUB_TOKEN,
+        okta: !!(c.env.OKTA_DOMAIN && c.env.OKTA_API_TOKEN),
+        atlassian: !!(c.env.ATLASSIAN_SITE && c.env.ATLASSIAN_EMAIL && c.env.ATLASSIAN_API_TOKEN),
+      },
+    });
+  })
+  .put(
+    "/console/apps/:id",
+    requireRole("admin"),
+    zValidator("param", z.object({ id: z.string().regex(/^[a-z0-9-]{3,60}$/) })),
+    zValidator(
+      "json",
+      z.object({
+        name: z.string().trim().min(2).max(60),
+        description: z.string().trim().max(200).nullish(),
+        aliases: z.array(z.string().trim().min(2).max(40)).max(10).default([]),
+        ownerTeamId: z.string().nullish(),
+        requiresManagerApproval: z.boolean(),
+        connector: z.enum(CONNECTOR_KINDS).nullable(),
+        connectorConfig: z.record(z.string(), z.string().trim().max(200)).default({}),
+      }),
+    ),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const b = c.req.valid("json");
+      const config = Object.fromEntries(Object.entries(b.connectorConfig).filter(([, v]) => v));
+      if (b.connector) {
+        const problem = await validateConnector(c.env, b.connector, config);
+        if (problem) return c.json({ error: problem }, 400);
+      }
+      if (b.ownerTeamId && !(await c.env.DB.prepare("SELECT 1 FROM teams WHERE id = ?").bind(b.ownerTeamId).first())) return c.json({ error: "Unknown team" }, 400);
+      const dup = await c.env.DB.prepare("SELECT id FROM applications WHERE lower(name) = lower(?) AND id != ?").bind(b.name, id).first();
+      if (dup) return c.json({ error: `An app called "${b.name}" already exists.` }, 400);
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          `INSERT INTO applications (id, name, description, owner_team_id, requires_manager_approval, aliases, connector, connector_config)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description, owner_team_id = excluded.owner_team_id,
+             requires_manager_approval = excluded.requires_manager_approval, aliases = excluded.aliases, connector = excluded.connector,
+             connector_config = excluded.connector_config`,
+        ).bind(id, b.name, b.description ?? null, b.ownerTeamId ?? null, b.requiresManagerApproval ? 1 : 0, JSON.stringify(b.aliases), b.connector, JSON.stringify(config)),
+        c.env.DB.prepare("INSERT INTO audit_log (id, actor_id, action, entity, entity_id, data, created_at) VALUES (?, ?, 'app.save', 'application', ?, ?, ?)").bind(
+          crypto.randomUUID(),
+          c.get("user")!.id,
+          id,
+          JSON.stringify({ connector: b.connector, config }),
+          Date.now(),
+        ),
+      ]);
+      return c.json({ ok: true });
+    },
+  )
+
+  // ───────────── access requests (IT view) ─────────────
+  .get("/console/access-requests", requireRole("agent", "admin"), async (c) => {
+    const user = c.get("user")!;
+    const scoped = user.role !== "admin";
+    const { results } = await c.env.DB.prepare(
+      `SELECT ar.id, ar.number, ar.status, ar.justification, ar.external_username, ar.provision_detail, ar.failure_ticket, ar.decision_note,
+              ar.created_at, ar.decided_at, ar.provisioned_at, a.name AS application, a.connector, u.name AS requester, m.name AS approver, ar.approver_email
+       FROM access_requests ar JOIN applications a ON a.id = ar.application_id JOIN user u ON u.id = ar.requester_id
+       LEFT JOIN user m ON m.id = ar.approver_id
+       ${scoped ? "WHERE a.owner_team_id IN (SELECT team_id FROM team_members WHERE user_id = ?)" : ""}
+       ORDER BY ar.created_at DESC LIMIT 200`,
+    )
+      .bind(...(scoped ? [user.id] : []))
+      .all();
+    return c.json({ requests: results });
+  })
+  .post("/console/access-requests/:id/retry", requireRole("admin"), uuidParam, async (c) => {
+    const id = c.req.valid("param").id;
+    const r = await c.env.DB.prepare("UPDATE access_requests SET status = 'APPROVED', updated_at = ? WHERE id = ? AND status = 'FAILED' RETURNING number")
+      .bind(Date.now(), id)
+      .first<{ number: string }>();
+    if (!r) return c.json({ error: "Only failed requests can be retried." }, 409);
+    const instance = `${id}-retry-${Date.now()}`;
+    await c.env.ACCESS_WORKFLOW.create({ id: instance, params: { requestId: id, mode: "provision" } });
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE access_requests SET workflow_instance_id = ? WHERE id = ?").bind(instance, id),
+      c.env.DB.prepare("INSERT INTO audit_log (id, actor_id, action, entity, entity_id, created_at) VALUES (?, ?, 'access.retry', 'access_request', ?, ?)").bind(
+        crypto.randomUUID(),
+        c.get("user")!.id,
+        id,
+        Date.now(),
+      ),
+    ]);
+    return c.json({ ok: true, number: r.number });
   })
 
   // ───────────── personal access tokens for the IT Ops MCP server ─────────────

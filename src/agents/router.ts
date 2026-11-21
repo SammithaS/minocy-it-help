@@ -98,7 +98,7 @@ export function accessAction(
 
 /** Starting a password reset → this turn's action. */
 export function passwordAction(
-  r: { ok: true; maskedEmail: string; accountLocked: boolean } | { ok: false; reason: "rate_limited" | "disabled" | "no_account" } | null,
+  r: { ok: true; maskedEmail: string; accountLocked: boolean } | { ok: false; reason: "rate_limited" | "disabled" | "no_account" | "unavailable" } | null,
 ): NextAction {
   if (!r) return { kind: "password_blocked", reason: "error" };
   return r.ok ? { kind: "password_verify", maskedEmail: r.maskedEmail, accountLocked: r.accountLocked } : { kind: "password_blocked", reason: r.reason };

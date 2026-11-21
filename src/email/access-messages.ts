@@ -89,7 +89,7 @@ export function accessGranted(env: AppEnv, r: AccessContext): OutgoingEmail {
         preview: `${r.app_name} is ready`,
         eyebrow: `${r.number} · Provisioned`,
         heading: `You're in — ${r.app_name} is ready`,
-        callout: { tone: "info", text: "Sign in with your usual Minocy account (SSO). It can take up to 15 minutes to appear." },
+        callout: { tone: "info", text: r.provision_detail ?? "Sign in with your usual company account." },
         paragraphs: [`Hi ${first(r.requester_name)}, your request was approved${r.decision_note ? ` with a note: "${r.decision_note}"` : ""} and your access has been set up.`],
         buttons: [{ label: "View your requests", href: myRequests(env) }],
         footer: "Something not working? Ask IT in the portal.",
@@ -146,6 +146,54 @@ export function accessNotGranted(env: AppEnv, r: AccessContext, why: "rejected" 
   };
 }
 
+/** → requester: GitHub sent an invite that they must accept. */
+export function accessInvitePending(env: AppEnv, r: AccessContext, detail: string): OutgoingEmail {
+  return {
+    channel: "email_employee",
+    kind: "access_invite_pending",
+    to: r.requester_email,
+    subject: `[${r.number}] Accept your ${r.app_name} invite`,
+    element: email(
+      {
+        preview: "One last step: accept the invite",
+        eyebrow: `${r.number} · Approved`,
+        heading: `Accept your ${r.app_name} invite`,
+        callout: { tone: "info", text: detail },
+        paragraphs: [
+          `Hi ${first(r.requester_name)}, your request was approved. ${r.connector === "github" ? "GitHub has emailed you an invitation — accept it there, or at github.com/orgs/<org>/invitation." : "Accept the invitation you've been sent."}`,
+          "We'll confirm here once you're in. Invites expire after 7 days.",
+        ],
+        buttons: r.connector === "github" ? [{ label: "Open GitHub", href: "https://github.com/settings/organizations" }] : [],
+        footer: "No reply needed.",
+      },
+      env,
+    ),
+  };
+}
+
+/** → requester: provisioning failed, IT has a ticket. */
+export function accessProvisionFailed(env: AppEnv, r: AccessContext, ticket: string): OutgoingEmail {
+  return {
+    channel: "email_employee",
+    kind: "access_failed",
+    to: r.requester_email,
+    subject: `[${r.number}] We couldn't set up ${r.app_name} automatically`,
+    element: email(
+      {
+        preview: `IT is on it (${ticket})`,
+        eyebrow: `${r.number} · Needs IT`,
+        heading: `${r.app_name} needs a hand from IT`,
+        paragraphs: [
+          `Hi ${first(r.requester_name)}, your request was approved, but setting up ${r.app_name} automatically didn't work. We've raised ${ticket} with the ${r.team_name ?? "IT"} team, who'll finish it for you.`,
+        ],
+        buttons: [{ label: `View ${ticket}`, href: `${env.APP_URL}/tickets/${ticket}` }],
+        footer: "You don't need to do anything.",
+      },
+      env,
+    ),
+  };
+}
+
 // ─────────────────────────── password reset ───────────────────────────
 
 export function passwordResetCode(env: AppEnv, to: string, name: string, code: string, minutes: number): OutgoingEmail {
@@ -165,54 +213,6 @@ export function passwordResetCode(env: AppEnv, to: string, name: string, code: s
           `Didn't ask to reset your password? Ignore this email — nothing changes — and tell IT if it keeps happening.`,
         ],
         footer: "IT will never ask you for this code.",
-      },
-      env,
-    ),
-  };
-}
-
-export async function passwordResetLink(env: AppEnv, to: string, name: string, resetId: string, minutes: number, unlocked: boolean): Promise<OutgoingEmail> {
-  const token = await signLink(env.BETTER_AUTH_SECRET, { purpose: "set-password", sub: resetId, exp: Date.now() + minutes * 60_000 });
-  return {
-    channel: "email_employee",
-    kind: "password_link",
-    to,
-    sensitive: true,
-    subject: "Set your new Minocy password",
-    element: email(
-      {
-        preview: `Link valid ${minutes} minutes`,
-        eyebrow: "Password reset",
-        heading: "Choose a new password",
-        callout: unlocked ? { tone: "info", text: "Your account has been unlocked." } : undefined,
-        paragraphs: [
-          `Hi ${first(name)}, use the button below to set a new password. The link works once and expires in ${minutes} minutes.`,
-          `Use at least 12 characters, with a mix of letters, numbers or symbols. Don't reuse a password from another site.`,
-        ],
-        buttons: [{ label: "Set new password", href: `${env.APP_URL}/api/public/password?t=${encodeURIComponent(token)}` }],
-        footer: "Didn't ask for this? Tell IT straight away.",
-      },
-      env,
-    ),
-  };
-}
-
-export function passwordChanged(env: AppEnv, to: string, name: string): OutgoingEmail {
-  return {
-    channel: "email_employee",
-    kind: "password_changed",
-    to,
-    subject: "Your Minocy password was changed",
-    element: email(
-      {
-        preview: "Password changed",
-        eyebrow: "Security notice",
-        heading: "Your password was changed",
-        paragraphs: [
-          `Hi ${first(name)}, your Minocy password was just changed through IT Help self-service.`,
-          `If this wasn't you, contact IT immediately.`,
-        ],
-        footer: "Sent for your security.",
       },
       env,
     ),

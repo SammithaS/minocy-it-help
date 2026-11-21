@@ -2,10 +2,19 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "../db/client";
 import { createAuth } from "../lib/auth";
+import { mayRequestSignInCode } from "../lib/okta-users";
 import { requireRole, type HonoEnv } from "./context";
 
 export const authRoutes = new Hono<HonoEnv>()
-  // Better Auth handles everything under /api/auth/*
+  // Sign-in codes only for people who are active in Okta (when Okta is configured); their profile is
+  // synced on the way. Same response either way, so the endpoint doesn't reveal who exists.
+  .post("/auth/email-otp/send-verification-otp", async (c) => {
+    const body = (await c.req.raw.clone().json().catch(() => null)) as { email?: unknown; type?: unknown } | null;
+    const email = typeof body?.email === "string" ? body.email : "";
+    if (email && body?.type === "sign-in" && !(await mayRequestSignInCode(c.env, email))) return c.json({ success: true });
+    return createAuth(c.env).handler(c.req.raw);
+  })
+  // Better Auth handles everything else under /api/auth/*
   .on(["GET", "POST"], "/auth/*", (c) => createAuth(c.env).handler(c.req.raw))
   .get("/me", requireRole(), async (c) => {
     const user = c.get("user")!;

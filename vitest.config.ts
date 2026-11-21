@@ -29,6 +29,14 @@ export default defineConfig(async () => {
             RESEND_API_KEY: "",
             IT_ADMIN_EMAIL: "",
             EMAIL_TRANSPORT: "log",
+            // Connector tests fake these APIs with a stubbed fetch. Okta stays off by default because it
+            // also gates sign-in; Okta tests pass their own env.
+            GITHUB_TOKEN: "test-github-token",
+            ATLASSIAN_SITE: "minocy-test.atlassian.net",
+            ATLASSIAN_EMAIL: "admin@minocy.example",
+            ATLASSIAN_API_TOKEN: "test-atlassian-token",
+            OKTA_DOMAIN: "",
+            OKTA_API_TOKEN: "",
           },
         },
       }),

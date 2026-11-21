@@ -22,7 +22,10 @@ export interface ToolContext {
 const ACCESS_STATUS_LABEL: Record<string, string> = {
   PENDING: "waiting for approval",
   APPROVED: "approved — being set up",
+  PROVISIONING: "approved — being set up",
+  PENDING_EXTERNAL: "approved — accept the invite you were sent",
   PROVISIONED: "done — access granted",
+  FAILED: "approved — IT is finishing the setup",
   REJECTED: "not approved",
   EXPIRED: "expired (no answer in time)",
 };
@@ -146,6 +149,7 @@ export function buildTools(ctx: ToolContext) {
           applicationId: s.accessDraft.applicationId,
           justification: s.accessDraft.justification,
           sessionId: ctx.sessionId,
+          externalUsername: s.accessDraft.externalUsername,
         });
         if (!r.ok) return { error: r.error };
         ctx.setState({ ...ctx.getState(), accessRequestNumber: r.number, accessDraft: null, awaitingAccessApp: false });
@@ -181,7 +185,7 @@ export function buildTools(ctx: ToolContext) {
         const s = ctx.getState();
         if (!s.passwordReset || s.passwordReset.stage === "code_sent" || !ctx.ownerId) return { done: false, error: "Identity not verified." };
         const r = await completePasswordReset(ctx.env, { resetId: s.passwordReset.id, userId: ctx.ownerId });
-        if (!r.ok) return { done: false, error: r.reason === "expired" ? "The verification timed out. Start again." : "Couldn't reset the password." };
+        if (!r.ok) return { done: false, error: r.reason === "expired" ? "The verification timed out. Start again." : r.reason === "okta_error" ? "Okta didn't accept the reset." : "Couldn't reset the password." };
         ctx.setState({ ...ctx.getState(), passwordReset: { ...s.passwordReset, stage: "done" } });
         return { done: true, emailedTo: r.maskedEmail, unlocked: r.unlocked };
       },

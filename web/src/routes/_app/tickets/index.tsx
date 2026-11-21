@@ -69,6 +69,9 @@ function MyTickets() {
 const ACCESS_STATUS: Record<AccessRequest["status"], { label: string; tone: string }> = {
   PENDING: { label: "Waiting for approval", tone: "bg-brand-50 text-brand-800" },
   APPROVED: { label: "Approved · setting up", tone: "bg-brand-50 text-brand-800" },
+  PROVISIONING: { label: "Setting up…", tone: "bg-progress-bg text-progress" },
+  PENDING_EXTERNAL: { label: "Accept your invite", tone: "bg-progress-bg text-progress" },
+  FAILED: { label: "IT is finishing this", tone: "bg-progress-bg text-progress" },
   PROVISIONED: { label: "Access granted", tone: "bg-resolved-bg text-resolved" },
   REJECTED: { label: "Not approved", tone: "bg-critical-bg text-critical" },
   EXPIRED: { label: "Expired", tone: "bg-canvas text-muted" },
@@ -93,6 +96,15 @@ function AccessRequestRow({ r }: { r: AccessRequest }) {
           Requested {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
           {r.decisionNote ? ` · “${r.decisionNote}”` : ""}
         </p>
+        {r.provisionDetail && r.status !== "FAILED" && <p className="mt-1 text-xs text-ink">{r.provisionDetail}</p>}
+        {r.failureTicket && (
+          <p className="mt-1 text-xs">
+            Tracked in{" "}
+            <Link to="/tickets/$number" params={{ number: r.failureTicket }} className="font-bold text-brand-700">
+              {r.failureTicket}
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

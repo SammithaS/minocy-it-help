@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { AccessStatus } from "../db/schema";
 import type { AppEnv } from "../env";
+import { CONNECTOR_NEEDS, GITHUB_USERNAME, type ConnectorKind } from "./connectors";
 
 export interface CatalogApp {
   id: string;
@@ -16,6 +17,9 @@ export interface CatalogApp {
   ownerMailbox: string | null;
   requiresManagerApproval: boolean;
   aliases: string[];
+  /** Null = no real connector configured, so the app can't be requested yet. */
+  connector: ConnectorKind | null;
+  connectorConfig: Record<string, string>;
 }
 
 export interface Approver {
@@ -36,6 +40,9 @@ export interface AccessRequestRow {
   approver_id: string | null;
   approver_email: string | null;
   session_id: string | null;
+  external_username: string | null;
+  provision_detail: string | null;
+  failure_ticket: string | null;
   decision_note: string | null;
   decided_at: number | null;
   provisioned_at: number | null;
@@ -46,13 +53,28 @@ export interface AccessRequestRow {
 
 export const justificationSchema = z.string().trim().min(10, "Say in a few words why you need it (at least 10 characters).").max(1000);
 
-export async function loadCatalog(db: D1Database): Promise<CatalogApp[]> {
+/**
+ * The app catalog. By default only apps with a real connector (GitHub / Okta) — those are the only ones
+ * an employee can request; `{ all: true }` includes unconfigured apps for the admin settings page.
+ */
+export async function loadCatalog(db: D1Database, opts: { all?: boolean } = {}): Promise<CatalogApp[]> {
   const { results } = await db
     .prepare(
-      `SELECT a.id, a.name, a.description, a.owner_team_id, a.requires_manager_approval, a.aliases, t.name AS team, t.mailbox
-       FROM applications a LEFT JOIN teams t ON t.id = a.owner_team_id ORDER BY a.name`,
+      `SELECT a.id, a.name, a.description, a.owner_team_id, a.requires_manager_approval, a.aliases, a.connector, a.connector_config, t.name AS team, t.mailbox
+       FROM applications a LEFT JOIN teams t ON t.id = a.owner_team_id ${opts.all ? "" : "WHERE a.connector IS NOT NULL"} ORDER BY a.name`,
     )
-    .all<{ id: string; name: string; description: string | null; owner_team_id: string | null; requires_manager_approval: number; aliases: string; team: string | null; mailbox: string | null }>();
+    .all<{
+      id: string;
+      name: string;
+      description: string | null;
+      owner_team_id: string | null;
+      requires_manager_approval: number;
+      aliases: string;
+      connector: ConnectorKind | null;
+      connector_config: string | null;
+      team: string | null;
+      mailbox: string | null;
+    }>();
   return results.map((r) => ({
     id: r.id,
     name: r.name,
@@ -62,8 +84,22 @@ export async function loadCatalog(db: D1Database): Promise<CatalogApp[]> {
     ownerMailbox: r.mailbox,
     requiresManagerApproval: !!r.requires_manager_approval,
     aliases: safeJsonArray(r.aliases),
+    connector: r.connector,
+    connectorConfig: safeJsonObject(r.connector_config),
   }));
 }
+
+const safeJsonObject = (s: string | null): Record<string, string> => {
+  try {
+    const v = JSON.parse(s || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+};
+
+/** Requests that are still in flight (approval or provisioning). */
+export const OPEN_ACCESS_STATUSES = ["PENDING", "APPROVED", "PROVISIONING", "PENDING_EXTERNAL"] as const;
 
 const safeJsonArray = (s: string | null): string[] => {
   try {
@@ -108,7 +144,7 @@ export interface AccessCheck {
 export async function checkAccess(env: AppEnv, userId: string, app: CatalogApp): Promise<AccessCheck> {
   const [grant, open, approver] = await Promise.all([
     env.DB.prepare("SELECT 1 AS ok FROM app_grants WHERE user_id = ? AND application_id = ?").bind(userId, app.id).first<{ ok: number }>(),
-    env.DB.prepare("SELECT number, status FROM access_requests WHERE requester_id = ? AND application_id = ? AND status IN ('PENDING','APPROVED') ORDER BY created_at DESC LIMIT 1")
+    env.DB.prepare("SELECT number, status FROM access_requests WHERE requester_id = ? AND application_id = ? AND status IN ('PENDING','APPROVED','PROVISIONING','PENDING_EXTERNAL') ORDER BY created_at DESC LIMIT 1")
       .bind(userId, app.id)
       .first<{ number: string; status: AccessStatus }>(),
     findApprover(env, userId, app),
@@ -134,6 +170,8 @@ export interface AccessResolution {
   approver: { name: string; email: string; kind: Approver["kind"] } | null;
   requiresApproval: boolean;
   ownerTeam: string | null;
+  /** E.g. "Your GitHub username" when the connector needs the employee's account name. */
+  usernameLabel: string | null;
   clarifyingQuestion: string | null;
   catalog: string[];
   method: "rules" | "llm" | "none";
@@ -188,6 +226,7 @@ export async function resolveAccessRequest(env: AppEnv, input: ResolveAccessInpu
     approver: null,
     requiresApproval: false,
     ownerTeam: null,
+    usernameLabel: null,
     clarifyingQuestion: question,
     catalog: names,
     method,
@@ -215,6 +254,7 @@ export async function resolveAccessRequest(env: AppEnv, input: ResolveAccessInpu
     }
   }
   if (!app) {
+    if (!names.length) return none("No apps are set up for self-service access yet — I can raise a ticket with the IT team for you instead.");
     const choices = inAll.length > 1 ? inAll.map((a) => a.name) : names;
     return none(`Which app do you need access to? I can request ${choices.join(", ")}.`);
   }
@@ -229,6 +269,7 @@ export async function resolveAccessRequest(env: AppEnv, input: ResolveAccessInpu
     approver: check.approver ? { name: check.approver.name, email: check.approver.email, kind: check.approver.kind } : null,
     requiresApproval: app.requiresManagerApproval,
     ownerTeam: app.ownerTeam,
+    usernameLabel: app.connector && CONNECTOR_NEEDS[app.connector].username ? (CONNECTOR_NEEDS[app.connector].label ?? "Your username") : null,
     clarifyingQuestion: null,
     catalog: names,
     method,
@@ -249,7 +290,7 @@ export type SubmitResult =
 
 export async function submitAccessRequest(
   env: AppEnv,
-  input: { requesterId: string; applicationId: string; justification: string; sessionId?: string | null },
+  input: { requesterId: string; applicationId: string; justification: string; sessionId?: string | null; externalUsername?: string | null },
 ): Promise<SubmitResult> {
   const justification = justificationSchema.safeParse(input.justification);
   if (!justification.success) return { ok: false, error: justification.error.issues[0]!.message };
@@ -263,15 +304,20 @@ export async function submitAccessRequest(
     return { ok: true, id: r!.id, number: check.openRequest.number, application: app.name, approver: check.approver, status: check.openRequest.status, existing: true };
   }
   if (app.requiresManagerApproval && !check.approver) return { ok: false, error: "There's no one to approve this request. Ask IT to set your manager." };
+  const username = input.externalUsername?.trim() || null;
+  if (app.connector && CONNECTOR_NEEDS[app.connector].username) {
+    if (!username) return { ok: false, error: `Add ${CONNECTOR_NEEDS[app.connector].label?.toLowerCase() ?? "your username"}.` };
+    if (app.connector === "github" && !GITHUB_USERNAME.test(username)) return { ok: false, error: "That isn't a valid GitHub username." };
+  }
 
   const id = crypto.randomUUID();
   const number = await nextAccessNumber(env.DB);
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO access_requests (id, number, requester_id, application_id, justification, status, approver_id, approver_email, session_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)`,
-    ).bind(id, number, input.requesterId, app.id, justification.data, check.approver?.id ?? null, check.approver?.email ?? null, input.sessionId ?? null, now, now),
+      `INSERT INTO access_requests (id, number, requester_id, application_id, justification, status, approver_id, approver_email, session_id, external_username, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?)`,
+    ).bind(id, number, input.requesterId, app.id, justification.data, check.approver?.id ?? null, check.approver?.email ?? null, input.sessionId ?? null, username, now, now),
     audit(env, input.requesterId, "access.request", id, { application: app.id, number }, now),
   ]);
 
@@ -333,12 +379,12 @@ export async function decideAccessRequest(
   return decision === "approve" ? "approved" : "rejected";
 }
 
-/** Mock provisioning: records the grant. A real connector (SCIM / the app's admin API) would go here. */
-export async function provisionAccess(env: AppEnv, requestId: string): Promise<boolean> {
-  const r = await env.DB.prepare("SELECT requester_id, application_id, status FROM access_requests WHERE id = ?")
+/** Records real access once the connector confirmed it (grant row + PROVISIONED). Idempotent. */
+export async function recordGrant(env: AppEnv, requestId: string, detail: string): Promise<void> {
+  const r = await env.DB.prepare("SELECT requester_id, application_id FROM access_requests WHERE id = ?")
     .bind(requestId)
-    .first<{ requester_id: string; application_id: string; status: AccessStatus }>();
-  if (!r || (r.status !== "APPROVED" && r.status !== "PROVISIONED")) return false;
+    .first<{ requester_id: string; application_id: string }>();
+  if (!r) throw new Error(`access request ${requestId} not found`);
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare("INSERT INTO app_grants (user_id, application_id, access_request_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING").bind(
@@ -347,20 +393,28 @@ export async function provisionAccess(env: AppEnv, requestId: string): Promise<b
       requestId,
       now,
     ),
-    env.DB.prepare("UPDATE access_requests SET status = 'PROVISIONED', provisioned_at = COALESCE(provisioned_at, ?), updated_at = ? WHERE id = ? AND status IN ('APPROVED','PROVISIONED')").bind(
+    env.DB.prepare("UPDATE access_requests SET status = 'PROVISIONED', provision_detail = ?, provisioned_at = COALESCE(provisioned_at, ?), updated_at = ? WHERE id = ?").bind(
+      detail,
       now,
       now,
       requestId,
     ),
-    audit(env, null, "access.provision", requestId, { application: r.application_id, mock: true }, now),
+    audit(env, null, "access.provision", requestId, { application: r.application_id, detail }, now),
   ]);
-  return true;
+}
+
+/** Moves a request through the provisioning states, recording what the connector said. */
+export async function setProvisionState(env: AppEnv, requestId: string, status: "PROVISIONING" | "PENDING_EXTERNAL" | "FAILED", detail: string | null, extra: { failureTicket?: string } = {}) {
+  await env.DB.prepare("UPDATE access_requests SET status = ?, provision_detail = COALESCE(?, provision_detail), failure_ticket = COALESCE(?, failure_ticket), updated_at = ? WHERE id = ?")
+    .bind(status, detail, extra.failureTicket ?? null, Date.now(), requestId)
+    .run();
+  if (status === "FAILED") await audit(env, null, "access.provision_failed", requestId, { detail, ticket: extra.failureTicket ?? null }).run();
 }
 
 /** Everything the workflow and emails need about one request. */
 export async function loadAccessContext(env: AppEnv, requestId: string) {
   const r = await env.DB.prepare(
-    `SELECT ar.*, a.name AS app_name, a.requires_manager_approval, u.name AS requester_name, u.email AS requester_email, u.department,
+    `SELECT ar.*, a.name AS app_name, a.requires_manager_approval, a.connector, a.connector_config, a.owner_team_id, u.name AS requester_name, u.email AS requester_email, u.department,
             t.name AS team_name, t.mailbox AS team_mailbox, m.name AS approver_name
      FROM access_requests ar JOIN applications a ON a.id = ar.application_id JOIN user u ON u.id = ar.requester_id
      LEFT JOIN teams t ON t.id = a.owner_team_id LEFT JOIN user m ON m.id = ar.approver_id WHERE ar.id = ?`,
@@ -370,6 +424,9 @@ export async function loadAccessContext(env: AppEnv, requestId: string) {
       AccessRequestRow & {
         app_name: string;
         requires_manager_approval: number;
+        connector: ConnectorKind | null;
+        connector_config: string | null;
+        owner_team_id: string | null;
         requester_name: string;
         requester_email: string;
         department: string | null;
@@ -385,7 +442,7 @@ export type AccessContext = NonNullable<Awaited<ReturnType<typeof loadAccessCont
 /** The employee's requests, newest first (portal list and the chat's status tool). */
 export async function listAccessRequests(env: AppEnv, userId: string, limit = 50) {
   const { results } = await env.DB.prepare(
-    `SELECT ar.id, ar.number, ar.status, ar.justification, ar.decision_note, ar.created_at, ar.decided_at, ar.provisioned_at, ar.approver_email,
+    `SELECT ar.id, ar.number, ar.status, ar.justification, ar.decision_note, ar.provision_detail, ar.failure_ticket, ar.created_at, ar.decided_at, ar.provisioned_at, ar.approver_email,
             a.name AS application, m.name AS approver_name
      FROM access_requests ar JOIN applications a ON a.id = ar.application_id LEFT JOIN user m ON m.id = ar.approver_id
      WHERE ar.requester_id = ? ORDER BY ar.created_at DESC LIMIT ?`,
@@ -397,6 +454,8 @@ export async function listAccessRequests(env: AppEnv, userId: string, limit = 50
       status: AccessStatus;
       justification: string;
       decision_note: string | null;
+      provision_detail: string | null;
+      failure_ticket: string | null;
       created_at: number;
       decided_at: number | null;
       provisioned_at: number | null;

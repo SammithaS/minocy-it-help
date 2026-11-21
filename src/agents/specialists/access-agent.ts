@@ -18,6 +18,7 @@ const output = z.object({
   approver: z.object({ name: z.string(), email: z.string(), kind: z.enum(["manager", "owner_team", "admin"]) }).nullable(),
   requiresApproval: z.boolean(),
   ownerTeam: z.string().nullable(),
+  usernameLabel: z.string().nullable(),
   clarifyingQuestion: z.string().nullable(),
   catalog: z.array(z.string()),
   method: z.enum(["rules", "llm", "none"]),

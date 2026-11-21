@@ -49,7 +49,9 @@ export interface AccessRequest {
   id: string;
   number: string;
   application: string;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "PROVISIONED" | "EXPIRED";
+  status: "PENDING" | "APPROVED" | "PROVISIONING" | "PENDING_EXTERNAL" | "PROVISIONED" | "FAILED" | "REJECTED" | "EXPIRED";
+  provisionDetail: string | null;
+  failureTicket: string | null;
   justification: string;
   decisionNote: string | null;
   approver: string | null;

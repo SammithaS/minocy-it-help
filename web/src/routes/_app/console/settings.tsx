@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Check, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { AppsSettings } from "@/components/console/apps-settings";
 import { PriorityBadge, type Priority } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -122,6 +123,8 @@ function SettingsForm({ data }: { data: Settings }) {
           ))}
         </div>
       </Card>
+
+      <AppsSettings />
 
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={() => save.mutate()} disabled={save.isPending || invalidHours}>
