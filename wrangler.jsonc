@@ -35,7 +35,11 @@
     { "tag": "v3", "new_sqlite_classes": ["TriageAgent"] }
   ],
   // Durable ticket lifecycle: notify → SLA timers → wait for resolution → confirm → close.
-  "workflows": [{ "name": "ticket-workflow", "binding": "TICKET_WORKFLOW", "class_name": "TicketWorkflow" }],
+  "workflows": [
+    { "name": "ticket-workflow", "binding": "TICKET_WORKFLOW", "class_name": "TicketWorkflow" },
+    // Access request: manager approves by signed email link → mock provisioning → notify.
+    { "name": "access-request-workflow", "binding": "ACCESS_WORKFLOW", "class_name": "AccessRequestWorkflow" }
+  ],
   // Cloudflare Email Service: team mailboxes must be verified destination addresses (free).
   "send_email": [{ "name": "EMAIL" }],
   // Daily digest to IT admins at 09:00 IST (03:30 UTC).

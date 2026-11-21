@@ -26,7 +26,9 @@ export type EscalationReason =
   | "failed_high_priority"
   | "frustration"
   | "no_article"
-  | "safety";
+  | "safety"
+  /** Self-service (password reset) couldn't finish: code failed, rate limit, disabled account. */
+  | "self_service_failed";
 
 export interface TicketDraft {
   title: string;
@@ -36,6 +38,26 @@ export interface TicketDraft {
   device: string | null;
   stepsTried: { order: number; text: string; result: "worked" | "failed" }[];
   kbArticleId: string | null;
+}
+
+/** What the Access agent found, shown in the access approval card (justification is editable). */
+export interface AccessDraft {
+  applicationId: string;
+  applicationName: string;
+  justification: string;
+  approverName: string | null;
+  approverKind: "manager" | "owner_team" | "admin" | null;
+  requiresApproval: boolean;
+  ownerTeam: string | null;
+}
+
+/** Self-service password reset progress. The code itself never touches state or the transcript. */
+export interface PasswordResetState {
+  id: string;
+  stage: "code_sent" | "verified" | "done";
+  maskedEmail: string;
+  accountLocked: boolean;
+  expiresAt: number;
 }
 
 export interface SupportState {
@@ -58,6 +80,11 @@ export interface SupportState {
   lastSearchConfident: boolean | null;
   /** The specialist the supervisor last handed off to (shown in the chat header). */
   activeAgent: string | null;
+  accessDraft: AccessDraft | null;
+  accessRequestNumber: string | null;
+  /** The Access agent asked which app — the next message is the app name. */
+  awaitingAccessApp: boolean;
+  passwordReset: PasswordResetState | null;
 }
 
 export const initialSupportState: SupportState = {
@@ -76,6 +103,10 @@ export const initialSupportState: SupportState = {
   resolvedByAssistant: false,
   lastSearchConfident: null,
   activeAgent: null,
+  accessDraft: null,
+  accessRequestNumber: null,
+  awaitingAccessApp: false,
+  passwordReset: null,
 };
 
 // ─────────────────────────── message inspection ───────────────────────────
@@ -96,6 +127,8 @@ export interface UiMessage {
 }
 
 export const STEP_TOOL = "reportStepOutcome";
+/** Client tool: the password-reset code card. Its output is only `{ verified }` — never the code. */
+export const VERIFY_TOOL = "verifyResetCode";
 
 export interface StepOutcome {
   /** "skipped" = the user chose to raise a ticket instead of trying this step. */
@@ -188,7 +221,17 @@ export type NextAction =
   | { kind: "status" }
   | { kind: "redirect"; to: "password" | "access" }
   | { kind: "chat" }
-  | { kind: "llm_route" };
+  | { kind: "llm_route" }
+  // Phase 6 quick actions (see router.ts accessAction / passwordAction / afterToolAction):
+  | { kind: "access_submit" }
+  | { kind: "access_info"; info: "has_access" | "open_request" | "which_app"; app?: string; number?: string; question?: string }
+  | { kind: "access_done"; number: string; app: string; approver: string | null; existing: boolean }
+  | { kind: "access_cancelled" }
+  | { kind: "password_verify"; maskedEmail: string; accountLocked: boolean }
+  | { kind: "password_confirm" }
+  | { kind: "password_done"; maskedEmail: string; unlocked: boolean }
+  | { kind: "password_cancelled" }
+  | { kind: "password_blocked"; reason: "rate_limited" | "disabled" | "no_account" | "verify_failed" | "error" };
 
 export interface TurnSignals {
   /** The latest user message text ("" when the turn was triggered by a tool result). */
@@ -237,6 +280,7 @@ export const escalationLabel: Record<EscalationReason, string> = {
   frustration: "This is taking too long",
   no_article: "There's no self-help guide for this",
   safety: "Safety issue — stop using the device",
+  self_service_failed: "Self-service couldn't finish this",
 };
 
 /** Shown in the chat as "Routed to Knowledge agent · KB-002 …". Persisted as a `data-handoff` message part. */

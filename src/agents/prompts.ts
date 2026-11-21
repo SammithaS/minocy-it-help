@@ -19,7 +19,8 @@ function directive(action: NextAction, s: SupportState): string {
         `You are the router. Decide what the user needs and hand off — don't solve it yourself:`,
         `- a fixable IT problem or "how do I…" → askKnowledgeAgent (then show step 1 with ${"reportStepOutcome"} if it finds a guide);`,
         `- they want a person/ticket, or it clearly needs IT (broken hardware, a request for new equipment) → askTicketAgent, then createTicket;`,
-        `- asking about their tickets → getMyTickets;`,
+        `- access to an app, licence or shared drive → askAccessAgent, then submitAccessRequest if it says so;`,
+        `- asking about their tickets → getMyTickets; their access requests → getMyAccessRequests;`,
         `- small talk or unclear → reply briefly and ask what's not working.`,
       ].join("\n");
     case "clarify":
@@ -34,11 +35,41 @@ function directive(action: NextAction, s: SupportState): string {
     case "ticket_cancelled":
       return `The user cancelled the ticket. Say that's fine in one sentence, and that they can ask for one any time.`;
     case "status":
-      return `The user is asking about their tickets. Use getMyTickets or getTicketStatus and answer in 1–3 sentences (number, status, team). If they add new details, use addCommentToTicket.`;
+      return `The user is asking about their tickets or requests. Use getMyTickets / getTicketStatus for INC numbers and getMyAccessRequests for access (REQ numbers), and answer in 1–3 sentences (number, status, team or approver). If they add new details to a ticket, use addCommentToTicket.`;
     case "redirect":
       return action.to === "password"
-        ? `This is a password/account problem. Self-service password reset arrives soon; for now point them to ${org.ssoPortal} → "Forgot password", and offer to raise a ticket with the Identity & Access team (askTicketAgent → createTicket) if they're locked out. Never ask for their password.`
-        : `This is an access request. Automated access requests arrive soon; for now offer to raise a ticket with the Identity & Access team (askTicketAgent → createTicket) naming the app and why they need it.`;
+        ? `Self-service password reset isn't available right now. Point them to ${org.ssoPortal} → "Forgot password", and offer to raise a ticket with the Identity & Access team (askTicketAgent → createTicket) if they're locked out. Never ask for their password.`
+        : `The access request couldn't be prepared automatically. Offer to raise a ticket with the Identity & Access team (askTicketAgent → createTicket) naming the app and why they need it.`;
+    case "access_submit":
+      return `The Access agent prepared a request for ${s.accessDraft?.applicationName}${s.accessDraft?.approverName ? `, to be approved by ${s.accessDraft.approverName}` : ""}. Call submitAccessRequest now — the user checks it${s.accessDraft?.justification ? "" : ", adds why they need it"} and sends it in a card. At most one short sentence before the call; nothing after it.`;
+    case "access_info":
+      return action.info === "has_access"
+        ? `The user already has ${action.app}. Tell them in one or two sentences and suggest signing in with their usual Minocy account (SSO). If it still says access denied, offer to look into it as a problem.`
+        : action.info === "open_request"
+          ? `The user already has an open request for ${action.app} (${action.number}). Tell them it's still in progress and that they'll get an email when it's done. Don't raise another.`
+          : `Ask which app they need, in your own friendly words, based on: "${action.question}". Keep it to one or two sentences.`;
+    case "access_done":
+      return action.existing
+        ? `There was already an open request ${action.number} for ${action.app}; nothing new was sent. Say so briefly.`
+        : `Request ${action.number} for ${action.app} was sent${action.approver ? ` to ${action.approver} for approval` : ""}. Confirm in 1–2 sentences: once ${action.approver ?? "it's"} approved, access is set up automatically and they'll get an email. The user has nothing more to do — never ask them to approve anything.`;
+    case "access_cancelled":
+      return `The user cancelled the access request. Say that's fine in one sentence.`;
+    case "password_verify":
+      return `Self-service password reset. ${action.accountLocked ? "Their account is locked; this will also unlock it. " : ""}We emailed a 6-digit code to ${action.maskedEmail}. Call ${"verifyResetCode"} now so they can type it into the card. One short sentence before the call (mention where the code went); never ask them to type the code or their password in the chat.`;
+    case "password_confirm":
+      return `The code checked out. Call resetPassword now — the user confirms in a card. One short sentence before the call, nothing after.`;
+    case "password_done":
+      return `Done: ${action.unlocked ? "the account is unlocked and " : ""}a one-time link to set a new password was emailed to ${action.maskedEmail} (valid 30 minutes). Tell them in 1–2 sentences, and that they'll need to sign in again on their laptop with the new password.`;
+    case "password_cancelled":
+      return `The user cancelled the password reset. Nothing changed. Say so in one sentence.`;
+    case "password_blocked":
+      return {
+        rate_limited: `They've reached today's limit of self-service resets. Say so kindly and offer to raise a ticket with the Identity & Access team.`,
+        disabled: `Their account is disabled, so self-service can't help. Offer to raise a ticket with the Identity & Access team.`,
+        no_account: `There's no directory account on file for them. Offer to raise a ticket with the Identity & Access team.`,
+        verify_failed: `We couldn't confirm the code (wrong too many times or expired). Say so kindly, don't blame them, and offer to raise a ticket with the Identity & Access team.`,
+        error: `Self-service password reset couldn't finish. Apologise briefly and offer to raise a ticket with the Identity & Access team.`,
+      }[action.reason] + ` If they agree, call askTicketAgent then createTicket. Never ask for their password.`;
     case "chat":
       return `Reply briefly and warmly. If they haven't said what's wrong yet, ask what's not working.`;
     case "show_step":

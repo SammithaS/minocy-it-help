@@ -11,11 +11,14 @@ import {
 import { z } from "zod";
 import { PRIORITIES } from "../db/schema";
 import type { AppEnv } from "../env";
+import { justificationSchema } from "../lib/access";
 import { chatModel } from "../lib/llm";
+import { startPasswordReset, verifyResetCode } from "../lib/password-reset";
 import { TICKET_CATEGORIES } from "../org-config";
 import { loadGuide } from "./guide";
 import { systemPrompt, type UserContext } from "./prompts";
-import { AGENT_LABEL, decide, routeByRules, type AgentName, type RouteDecision } from "./router";
+import { accessAction, afterToolAction, AGENT_LABEL, decide, passwordAction, routeByRules, type AgentName, type RouteDecision } from "./router";
+import { AccessAgent, type AccessAgentInput, type AccessAgentOutput } from "./specialists/access-agent";
 import { KnowledgeAgent, type KnowledgeInput, type KnowledgeOutput } from "./specialists/knowledge-agent";
 import { TicketAgent, type TicketAgentInput, type TicketDraftOutput } from "./specialists/ticket-agent";
 import {
@@ -26,6 +29,7 @@ import {
   initialSupportState,
   nextAction,
   STEP_TOOL,
+  VERIFY_TOOL,
   type NextAction,
   type SupportState,
   type TicketDraft,
@@ -54,7 +58,7 @@ const ticketDraftSchema = z.object({
 /** Which tools the model may use for each action — keeps small models on rails. */
 const TOOLS_FOR: Record<NextAction["kind"], ToolName[]> = {
   find_article: [],
-  llm_route: ["askKnowledgeAgent", "askTicketAgent", STEP_TOOL, "createTicket", "getMyTickets"],
+  llm_route: ["askKnowledgeAgent", "askTicketAgent", "askAccessAgent", STEP_TOOL, "createTicket", "submitAccessRequest", "getMyTickets"],
   show_step: [STEP_TOOL, "flagEscalation"],
   await_outcome: ["flagEscalation"],
   resolved: [],
@@ -63,10 +67,65 @@ const TOOLS_FOR: Record<NextAction["kind"], ToolName[]> = {
   ticket_cancelled: [],
   ticket_raised: ["getTicketStatus", "addCommentToTicket"],
   clarify: [],
-  status: ["getMyTickets", "getTicketStatus", "addCommentToTicket"],
+  status: ["getMyTickets", "getTicketStatus", "addCommentToTicket", "getMyAccessRequests"],
   redirect: ["askTicketAgent", "createTicket"],
   chat: [],
+  access_submit: ["submitAccessRequest"],
+  access_info: [],
+  access_done: ["getMyAccessRequests"],
+  access_cancelled: [],
+  password_verify: [VERIFY_TOOL],
+  password_confirm: ["resetPassword"],
+  password_done: [],
+  password_cancelled: [],
+  password_blocked: ["askTicketAgent", "createTicket"],
 };
+
+/**
+ * Card actions where the next step must be a specific tool call. The supervisor writes the one-line
+ * lead-in itself and forces the call, so the card always appears (a directive alone sometimes got a
+ * "we've emailed you a code" sentence with no card).
+ */
+function forcedCard(action: NextAction, s: SupportState): { tool: ToolName; lead: string } | null {
+  switch (action.kind) {
+    case "access_submit": {
+      const d = s.accessDraft;
+      if (!d) return null;
+      const who = d.requiresApproval && d.approverName ? ` — ${d.approverName} will be asked to approve it` : "";
+      return { tool: "submitAccessRequest", lead: `Here's your request for **${d.applicationName}**${who}. ${d.justification ? "Check it and send it when you're happy." : "Add a line on why you need it, then send it."}` };
+    }
+    case "password_verify":
+      return {
+        tool: VERIFY_TOOL,
+        lead: `${action.accountLocked ? "Your account is locked — I can unlock it and reset your password. " : "I can reset your password for you. "}First, a quick check that it's you: I've emailed a 6-digit code to ${action.maskedEmail}. Type it into the card below (never into the chat).`,
+      };
+    case "password_confirm":
+      return { tool: "resetPassword", lead: "Thanks, that's confirmed. One last check before I reset it:" };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Confirmations that carry facts (numbers, who approves, what was emailed) are written here, not by
+ * the model — no hallucinated "temporary password", and no model call spent on them.
+ */
+function fixedReply(action: NextAction): string | null {
+  switch (action.kind) {
+    case "access_done":
+      return action.existing
+        ? `You already have an open request for ${action.app} (${action.number}), so I didn't send another. You'll get an email as soon as it's done.`
+        : `Done — request **${action.number}** for ${action.app} is ${action.approver ? `with ${action.approver} for approval` : "being set up"}. Once it's approved, access is set up automatically and you'll get an email. Nothing else to do for now.`;
+    case "access_cancelled":
+      return "No problem — I haven't sent anything. Ask me any time if you need access later.";
+    case "password_done":
+      return `All set${action.unlocked ? " — your account is unlocked" : ""}. I've emailed a one-time link to ${action.maskedEmail} to choose your new password; it works once and expires in 30 minutes. After that, sign in on your laptop and in Minocy apps with the new password.`;
+    case "password_cancelled":
+      return "Okay, I've cancelled the reset — nothing changed on your account.";
+    default:
+      return null;
+  }
+}
 
 /**
  * Supervisor agent — one Durable Object per conversation (instance name = chat session id).
@@ -106,7 +165,7 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
 
   private async handoff<I, O>(
     agent: AgentName,
-    cls: typeof KnowledgeAgent | typeof TicketAgent,
+    cls: typeof KnowledgeAgent | typeof TicketAgent | typeof AccessAgent,
     input: I,
     route: Pick<RouteDecision, "method" | "reason">,
     events: HandoffEvent[],
@@ -130,17 +189,92 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
-    const ms = Date.now() - started;
     if (error) console.error(`[supervisor] ${agent} hand-off failed: ${error}`);
-    events.push({ agent, label: AGENT_LABEL[agent], method: route.method, reason: route.reason, status, summary: summary || "couldn't finish", ms });
+    await this.logRun(agent, route, events, { status, summary, error, ms: Date.now() - started });
+    return output;
+  }
+
+  /** A chip in the chat + a row in agent_runs (analytics, routing eval). */
+  private async logRun(
+    agent: AgentName,
+    route: Pick<RouteDecision, "method" | "reason">,
+    events: HandoffEvent[],
+    r: { status: HandoffEvent["status"]; summary: string; error: string | null; ms: number },
+  ) {
+    events.push({ agent, label: AGENT_LABEL[agent], method: route.method, reason: route.reason, status: r.status, summary: r.summary || "couldn't finish", ms: r.ms });
     const owner = await this.owner();
     await this.env.DB.prepare(
       `INSERT INTO agent_runs (id, session_id, user_id, agent, route_method, reason, status, summary, error, duration_ms, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-      .bind(crypto.randomUUID(), this.name, owner?.user_id ?? null, agent, route.method, route.reason, status, summary, error, ms, Date.now())
+      .bind(crypto.randomUUID(), this.name, owner?.user_id ?? null, agent, route.method, route.reason, r.status, r.summary, r.error, r.ms, Date.now())
       .run();
-    return output;
+  }
+
+  /** The employee's recent messages (no secrets), oldest first. */
+  private recentUserTexts(limit = 20) {
+    return (this.messages as unknown as UiMessage[])
+      .filter((m) => m.role === "user")
+      .map((m) => m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join(" "))
+      .filter((t) => t && !detect.secret(t))
+      .slice(-limit);
+  }
+
+  private async runAccess(route: Pick<RouteDecision, "method" | "reason">, events: HandoffEvent[], extra?: string) {
+    const owner = await this.owner();
+    if (!owner) return null;
+    const userMessages = this.recentUserTexts(10);
+    if (extra && userMessages.at(-1) !== extra) userMessages.push(extra);
+    if (!userMessages.length) return null;
+    const out = await this.handoff<AccessAgentInput, AccessAgentOutput>("access", AccessAgent, { requesterId: owner.user_id, userMessages }, route, events, (o) =>
+      !o.applicationName ? "needs the app name" : o.alreadyHasAccess ? `${o.applicationName} · already has it` : o.openRequest ? `${o.applicationName} · ${o.openRequest.number} open` : `${o.applicationName} · approver ${o.approver?.name ?? "not needed"}`,
+    );
+    this.setState({
+      ...this.state,
+      awaitingAccessApp: !!out && !out.applicationName,
+      accessDraft:
+        out?.applicationId && out.applicationName && !out.alreadyHasAccess && !out.openRequest
+          ? {
+              applicationId: out.applicationId,
+              applicationName: out.applicationName,
+              justification: out.justification,
+              approverName: out.approver?.name ?? null,
+              approverKind: out.approver?.kind ?? null,
+              requiresApproval: out.requiresApproval,
+              ownerTeam: out.ownerTeam,
+            }
+          : null,
+    });
+    return out;
+  }
+
+  /** Password reset is a deterministic tool flow, not a model: start it before the model call. */
+  private async runPasswordStart(route: Pick<RouteDecision, "method" | "reason">, events: HandoffEvent[]) {
+    const owner = await this.owner();
+    if (!owner) return null;
+    const started = Date.now();
+    try {
+      const r = await startPasswordReset(this.env, { userId: owner.user_id, sessionId: this.name });
+      if (r.ok) {
+        this.setState({
+          ...this.state,
+          activeAgent: AGENT_LABEL.password,
+          passwordReset: { id: r.resetId, stage: "code_sent", maskedEmail: r.maskedEmail, accountLocked: r.accountLocked, expiresAt: r.expiresAt },
+        });
+      }
+      await this.logRun("password", route, events, {
+        status: "completed",
+        summary: r.ok ? `code sent to ${r.maskedEmail}` : r.reason.replace("_", " "),
+        error: null,
+        ms: Date.now() - started,
+      });
+      return r;
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      console.error("[supervisor] password reset failed:", error);
+      await this.logRun("password", route, events, { status: "error", summary: "", error, ms: Date.now() - started });
+      return null;
+    }
   }
 
   private async runKnowledge(query: string, route: Pick<RouteDecision, "method" | "reason">, events: HandoffEvent[]) {
@@ -165,11 +299,7 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
   private async runTicketWriter(route: Pick<RouteDecision, "method" | "reason">, events: HandoffEvent[]) {
     const s = this.state;
     const owner = await this.owner();
-    const userMessages = (this.messages as unknown as UiMessage[])
-      .filter((m) => m.role === "user")
-      .map((m) => m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join(" "))
-      .filter((t) => t && !detect.secret(t))
-      .slice(-20);
+    const userMessages = this.recentUserTexts(20);
     const stepsTried = s.steps
       .filter((x) => x.status === "worked" || x.status === "failed") // skipped steps weren't tried
       .map((x) => ({ order: x.order, text: x.text, result: x.status as "worked" | "failed" }));
@@ -244,11 +374,20 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
     }
     if (ticketDenied) this.setState({ ...this.state, ticketDraft: null, escalationReason: null });
 
+    // Phase 6 quick actions: card answers first, then rules-routed access / password requests.
+    let quick: NextAction | null = afterToolAction(lastTool, this.state);
+    if (!quick && route?.agent === "access") quick = accessAction(await this.runAccess(route, events));
+    if (!quick && route?.agent === "password") quick = passwordAction(await this.runPasswordStart(route, events));
+    if (quick?.kind === "password_blocked" || (quick?.kind === "redirect" && quick.to === "password")) {
+      this.setState({ ...this.state, escalationReason: "self_service_failed", passwordReset: null });
+    }
+    if (quick?.kind === "access_cancelled") this.setState({ ...this.state, accessDraft: null });
+
     // 5. One action for this turn.
     const action: NextAction =
       justRaised && this.state.ticketNumber
         ? { kind: "ticket_raised", ticketNumber: this.state.ticketNumber, justRaised: true }
-        : decide({ route, base: nextAction(this.state, { lastUserText }), state: this.state, ticketDenied, clarifyingQuestion });
+        : (quick ?? decide({ route, base: nextAction(this.state, { lastUserText }), state: this.state, ticketDenied, clarifyingQuestion }));
     await this.touchSession(lastUserText, action.kind);
 
     const tools = buildTools({
@@ -267,20 +406,72 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
         const d = await this.runTicketWriter({ method: "llm", reason: "model chose a ticket" }, events);
         return d ? { ok: true } : { ok: false, error: "The ticket agent couldn't draft this one. Offer the helpdesk number instead." };
       },
+      askAccessAgent: async (request) => {
+        const o = await this.runAccess({ method: "llm", reason: "model chose access" }, events, request);
+        const a = accessAction(o);
+        if (a.kind === "access_submit") return { guidance: "Now call submitAccessRequest so the user can review and send the request." };
+        if (a.kind === "access_info" && a.info === "has_access") return { guidance: `They already have ${a.app}. Tell them; don't submit anything.` };
+        if (a.kind === "access_info" && a.info === "open_request") return { guidance: `Request ${a.number} for ${a.app} is already open. Tell them; don't submit another.` };
+        if (a.kind === "access_info") return { guidance: `Ask: ${a.question}` };
+        return { guidance: "The Access agent couldn't help. Offer a ticket with the Identity & Access team." };
+      },
     });
 
+    // An approved access request / password reset: run the tool here and confirm with fixed text, instead
+    // of letting the SDK run it inside another model call (which then paraphrased the result).
+    const approvedNow =
+      last?.role === "assistant" &&
+      lastTool?.state === "approval-responded" &&
+      (lastTool.type === "tool-submitAccessRequest" || lastTool.type === "tool-resetPassword")
+        ? lastTool
+        : null;
+    if (approvedNow?.toolCallId) {
+      const name = approvedNow.type.slice("tool-".length) as "submitAccessRequest" | "resetPassword";
+      const toolCallId = approvedNow.toolCallId;
+      const output = (await tools[name].execute!({}, { toolCallId, messages: [], context: {} as never })) as Record<string, unknown>;
+      const after = afterToolAction({ ...approvedNow, state: "output-available", output }, this.state);
+      if (after?.kind === "password_blocked") this.setState({ ...this.state, escalationReason: "self_service_failed", passwordReset: null });
+      const reply =
+        (after && fixedReply(after)) ??
+        (typeof output.error === "string" ? `Sorry — that didn't go through: ${output.error}` : "Sorry — that didn't go through. Want me to raise a ticket with the IT team instead?");
+      const stream = createUIMessageStream({
+        execute: ({ writer }) => {
+          writer.write({ type: "tool-output-available", toolCallId, output });
+          writer.write({ type: "text-start", id: "reply" });
+          writer.write({ type: "text-delta", id: "reply", delta: reply });
+          writer.write({ type: "text-end", id: "reply" });
+        },
+      });
+      return createUIMessageStreamResponse({ stream });
+    }
+
     const modelMessages = await convertToModelMessages(this.messages as UIMessage[]);
+    const forced = forcedCard(action, this.state);
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         for (const e of events) writer.write({ type: "data-handoff", data: e });
+        const fixed = fixedReply(action);
+        if (fixed) {
+          writer.write({ type: "text-start", id: "reply" });
+          writer.write({ type: "text-delta", id: "reply", delta: fixed });
+          writer.write({ type: "text-end", id: "reply" });
+          return;
+        }
+        if (forced) {
+          writer.write({ type: "text-start", id: "lead" });
+          writer.write({ type: "text-delta", id: "lead", delta: forced.lead });
+          writer.write({ type: "text-end", id: "lead" });
+        }
         let emitted = events.length;
         const result = streamText({
           model: chatModel(this.env, { session: this.name, agent: "supervisor" }),
           system: systemPrompt(user, this.state, action, detect.secret(lastUserText)),
           messages: modelMessages,
           tools,
-          activeTools: TOOLS_FOR[action.kind],
-          stopWhen: isStepCount(5),
+          activeTools: forced ? [forced.tool] : TOOLS_FOR[action.kind],
+          // A card action is exactly one forced tool call; the card (client tool / approval) ends the turn.
+          ...(forced ? { toolChoice: { type: "tool" as const, toolName: forced.tool } } : {}),
+          stopWhen: isStepCount(forced ? 1 : 5),
           abortSignal: options?.abortSignal,
           temperature: 0.3,
           // Model-chosen hand-offs happen mid-stream; surface their chips as they complete.
@@ -305,6 +496,41 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid draft" };
     this.setState({ ...s, ticketDraft: { ...s.ticketDraft, ...parsed.data } });
     return { ok: true };
+  }
+
+  /** The access card's reason field. Validated; only while a draft is open. */
+  @callable()
+  async updateAccessDraft(edit: unknown) {
+    const s = this.state;
+    if (!s.accessDraft) return { ok: false, error: "There's no open access request to edit." };
+    const parsed = z.object({ justification: justificationSchema }).safeParse(edit);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid reason" };
+    this.setState({ ...s, accessDraft: { ...s.accessDraft, justification: parsed.data.justification } });
+    return { ok: true };
+  }
+
+  /**
+   * The password code card calls this directly (not as a chat message), so the code never enters the
+   * transcript or the model's context. Attempts are limited in D1.
+   */
+  @callable()
+  async checkResetCode(code: unknown) {
+    const s = this.state;
+    const owner = await this.owner();
+    if (!owner || !s.passwordReset || s.passwordReset.stage !== "code_sent") return { ok: false, error: "There's no code waiting. Ask to reset your password again." };
+    if (typeof code !== "string" || !/^\s*\d{6}\s*$/.test(code)) return { ok: false, error: "Enter the 6-digit code from the email." };
+    const r = await verifyResetCode(this.env, { resetId: s.passwordReset.id, userId: owner.user_id, code });
+    if (r.ok) {
+      this.setState({ ...this.state, passwordReset: { ...s.passwordReset, stage: "verified" } });
+      return { ok: true };
+    }
+    const error = {
+      wrong: `That code isn't right.${"attemptsLeft" in r ? ` ${r.attemptsLeft} ${r.attemptsLeft === 1 ? "try" : "tries"} left.` : ""}`,
+      expired: "That code has expired.",
+      too_many: "Too many wrong codes.",
+      not_found: "This reset is no longer active.",
+    }[r.reason];
+    return { ok: false, error, final: r.reason !== "wrong" };
   }
 
   /** Spike/diagnostics: proves a sub-agent hand-off round-trips (used by tests and /api/health/subagents). */

@@ -47,6 +47,8 @@ export const user = sqliteTable("user", {
   role: text("role", { enum: ROLES }).notNull().default("employee"),
   department: text("department"),
   location: text("location"),
+  /** Line manager (approves access requests). Plain id, no FK, so seeding order doesn't matter. */
+  managerId: text("manager_id"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -315,25 +317,92 @@ export const applications = sqliteTable("applications", {
   requiresManagerApproval: integer("requires_manager_approval", { mode: "boolean" })
     .notNull()
     .default(true),
+  /** Other names people use ("sfdc", "finance drive"); matched before any model call. */
+  aliases: text("aliases", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
 });
 
-export const accessRequests = sqliteTable("access_requests", {
-  id: id(),
-  requesterId: text("requester_id")
-    .notNull()
-    .references(() => user.id),
-  applicationId: text("application_id")
-    .notNull()
-    .references(() => applications.id),
-  justification: text("justification").notNull(),
-  status: text("status", { enum: ["PENDING", "APPROVED", "REJECTED", "PROVISIONED"] })
-    .notNull()
-    .default("PENDING"),
-  approverEmail: text("approver_email"),
-  workflowInstanceId: text("workflow_instance_id"),
-  createdAt: createdAt(),
+export const ACCESS_STATUSES = ["PENDING", "APPROVED", "REJECTED", "PROVISIONED", "EXPIRED"] as const;
+export type AccessStatus = (typeof ACCESS_STATUSES)[number];
+
+export const accessRequests = sqliteTable(
+  "access_requests",
+  {
+    id: id(),
+    /** REQ-1001 */
+    number: text("number"),
+    requesterId: text("requester_id")
+      .notNull()
+      .references(() => user.id),
+    applicationId: text("application_id")
+      .notNull()
+      .references(() => applications.id),
+    justification: text("justification").notNull(),
+    status: text("status", { enum: ACCESS_STATUSES }).notNull().default("PENDING"),
+    approverId: text("approver_id"),
+    approverEmail: text("approver_email"),
+    sessionId: text("session_id"),
+    decisionNote: text("decision_note"),
+    decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+    provisionedAt: integer("provisioned_at", { mode: "timestamp_ms" }),
+    workflowInstanceId: text("workflow_instance_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("access_requests_number").on(t.number), index("access_requests_requester_idx").on(t.requesterId)],
+);
+
+/** Who has which application (the mock provisioning target). */
+export const appGrants = sqliteTable(
+  "app_grants",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    applicationId: text("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    accessRequestId: text("access_request_id"),
+    grantedAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.applicationId] })],
+);
+
+/**
+ * Mock corporate directory (stands in for Entra ID / AD): account status for self-service password
+ * reset. No password is ever stored here.
+ */
+export const directoryAccounts = sqliteTable("directory_accounts", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  username: text("username").notNull().unique(),
+  status: text("status", { enum: ["active", "locked", "disabled"] }).notNull().default("active"),
+  mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
+  lockedAt: integer("locked_at", { mode: "timestamp_ms" }),
+  passwordChangedAt: integer("password_changed_at", { mode: "timestamp_ms" }),
   updatedAt: updatedAt(),
 });
+
+/** One self-service password reset attempt: email code → verified → approved → link used. */
+export const passwordResets = sqliteTable(
+  "password_resets",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    sessionId: text("session_id"),
+    /** HMAC of the code; the code itself is never stored. */
+    codeHash: text("code_hash").notNull(),
+    codeExpiresAt: integer("code_expires_at", { mode: "timestamp_ms" }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
+    completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+    linkUsedAt: integer("link_used_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("password_resets_user_idx").on(t.userId, t.createdAt)],
+);
 
 export const auditLog = sqliteTable("audit_log", {
   id: id(),

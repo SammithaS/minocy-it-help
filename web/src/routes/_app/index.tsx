@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { AppWindow, ArrowRight, KeyRound, Mail, Printer, Ticket, Wifi } from "lucide-react";
+import { AppWindow, ArrowRight, KeyRound, Laptop, LockKeyhole, Mail, Printer, Ticket, Wifi } from "lucide-react";
 import { TicketRow } from "@/components/tickets/ticket-row";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { isOpen, myTicketsQuery } from "@/lib/tickets";
@@ -10,13 +10,19 @@ export const Route = createFileRoute("/_app/")({
   component: Home,
 });
 
+/**
+ * Each tile opens a chat with a message the supervisor's routing rules send straight to the right
+ * agent (password reset, Access agent, Knowledge agent, Ticket agent) — no model call to route.
+ */
 const tiles = [
-  { title: "Reset password", note: "Locked out or expired", icon: KeyRound, bg: "#E8EFFD", fg: "#1D4ED8" },
-  { title: "Wi-Fi & VPN", note: "Dropping, slow, can't connect", icon: Wifi, bg: "#E0F2FE", fg: "#0369A1" },
-  { title: "Email & calendar", note: "Outlook, sync, shared mailboxes", icon: Mail, bg: "#EEF2FF", fg: "#4338CA" },
-  { title: "Printers", note: "Jams, drivers, scan to email", icon: Printer, bg: "#F1F5F9", fg: "#334155" },
-  { title: "Software", note: "Install or fix an app", icon: AppWindow, bg: "#ECFEFF", fg: "#0E7490" },
-  { title: "Raise a ticket", note: "Talk to the IT team", icon: Ticket, bg: "#0F1B2D", fg: "#FFFFFF" },
+  { title: "Reset password", note: "Forgotten, expired or locked out", icon: KeyRound, bg: "#E8EFFD", fg: "#1D4ED8", ask: "I need to reset my password" },
+  { title: "Request access", note: "Apps, licences, shared drives", icon: LockKeyhole, bg: "#E0F2FE", fg: "#0369A1", ask: "I need access to an app" },
+  { title: "Wi-Fi & VPN", note: "Dropping, slow, can't connect", icon: Wifi, bg: "#ECFEFF", fg: "#0E7490", ask: "My Wi-Fi or VPN isn't working" },
+  { title: "Email & calendar", note: "Outlook, sync, shared mailboxes", icon: Mail, bg: "#EEF2FF", fg: "#4338CA", ask: "Outlook isn't syncing my email" },
+  { title: "Printers", note: "Jams, drivers, scan to email", icon: Printer, bg: "#F1F5F9", fg: "#334155", ask: "My printer isn't printing" },
+  { title: "Software", note: "Install or fix an app", icon: AppWindow, bg: "#E8EFFD", fg: "#1E40AF", ask: "I need to install some software" },
+  { title: "Laptop", note: "Slow, battery, won't start", icon: Laptop, bg: "#F1F5F9", fg: "#0F1B2D", ask: "My laptop is running slow" },
+  { title: "Raise a ticket", note: "Talk to the IT team", icon: Ticket, bg: "#0F1B2D", fg: "#FFFFFF", ask: "I'd like to raise a ticket with IT" },
 ];
 
 function greeting() {
@@ -90,9 +96,14 @@ function Home() {
 
       <section>
         <h2 className="mb-4 text-xl font-extrabold">Fix it yourself</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {tiles.map((t) => (
-            <div key={t.title} className="rounded-tile border border-line bg-card p-4">
+            <button
+              key={t.title}
+              type="button"
+              onClick={() => startChat(t.ask)}
+              className="rounded-tile border border-line bg-card p-4 text-left transition-colors hover:border-brand-700/40 hover:bg-brand-50/40 focus-visible:outline-2 focus-visible:outline-brand-700"
+            >
               <span
                 className="grid size-11 place-items-center rounded-xl"
                 style={{ background: t.bg, color: t.fg }}
@@ -101,7 +112,7 @@ function Home() {
               </span>
               <p className="mt-3 text-[15px] font-bold">{t.title}</p>
               <p className="mt-0.5 text-[13px] text-muted">{t.note}</p>
-            </div>
+            </button>
           ))}
         </div>
       </section>

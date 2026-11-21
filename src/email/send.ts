@@ -22,7 +22,15 @@ export interface OutgoingEmail {
   element: ReactElement;
   ticketId?: string | null;
   replyTo?: string | null;
+  /**
+   * Carries a secret (reset code, set-password link). Sent as usual, but the Outbox keeps only the
+   * subject and recipient — admins must not be able to read it. In log mode the text goes to the
+   * Worker console so the flow is usable in dev (same as sign-in codes).
+   */
+  sensitive?: boolean;
 }
+
+const WITHHELD = "[content withheld: contains a one-time code or security link]";
 
 export interface SendResult {
   status: "sent" | "logged" | "failed";
@@ -67,7 +75,8 @@ export async function sendEmail(env: AppEnv, e: OutgoingEmail): Promise<SendResu
       error = err instanceof Error ? err.message : String(err);
     }
   } else {
-    console.log(`[email:${e.kind}] to=${e.to} subject="${e.subject}"`);
+    console.log(`[email:${e.kind}] to=${e.to} subject="${e.subject}"${e.sensitive ? `
+${text}` : ""}`);
   }
 
   const notificationId = crypto.randomUUID();
@@ -75,7 +84,20 @@ export async function sendEmail(env: AppEnv, e: OutgoingEmail): Promise<SendResu
     `INSERT INTO notifications (id, ticket_id, channel, kind, recipient, subject, transport, status, error, html, text, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(notificationId, e.ticketId ?? null, e.channel, e.kind, e.to, e.subject, transport, status, error, html, text, Date.now())
+    .bind(
+      notificationId,
+      e.ticketId ?? null,
+      e.channel,
+      e.kind,
+      e.to,
+      e.subject,
+      transport,
+      status,
+      error,
+      e.sensitive ? `<p>${WITHHELD}</p>` : html,
+      e.sensitive ? WITHHELD : text,
+      Date.now(),
+    )
     .run();
 
   if (status === "failed") throw new Error(`Email ${e.kind} to ${e.to} failed: ${error}`);

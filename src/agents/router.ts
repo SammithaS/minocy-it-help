@@ -3,7 +3,7 @@
  * can't place — and it does so inside the supervisor's normal turn by choosing a hand-off tool, so
  * routing never costs an extra model call.
  */
-import { detect, type NextAction, type SupportState } from "./state";
+import { detect, VERIFY_TOOL, type NextAction, type SupportState, type UiPart } from "./state";
 
 export type AgentName = "knowledge" | "ticket" | "access" | "password" | "status" | "chat";
 
@@ -13,10 +13,10 @@ export interface RouteDecision {
   reason: string;
 }
 
-const TICKET_REF = /\bINC-?\d{3,6}\b/i;
+const TICKET_REF = /\b(INC|REQ)-?\d{3,6}\b/i;
 const PASSWORD = /\b(forgot|reset|change|expired?|locked)\b.{0,30}\b(password|passcode|account)\b|\b(password|account)\b.{0,20}\b(reset|expired|locked( out)?)\b|\blocked out\b/i;
 const ACCESS = /\b(need|want|get|request|grant|give me|requesting)\b.{0,25}\b(access|permission|permissions|licen[cs]e)\b|\baccess (to|for)\b|\b(access denied|don'?t have access|no access)\b/i;
-const STATUS = /\b(status|update|progress)\b.{0,30}\b(ticket|request|incident)\b|\b(my|any) (open )?tickets\b/i;
+const STATUS = /\b(status|update|progress)\b.{0,30}\b(ticket|request|incident)\b|\b(my|any) (open )?(tickets|requests)\b/i;
 const SMALL_TALK = /^\s*(hi+|hello|hey|hii+|namaste|good (morning|afternoon|evening)|thanks?( you)?|thank u|ok(ay)?|cool|great|bye)[\s!.]*$/i;
 const AFFIRMATIVE = /^\s*(yes|yeah|yep|ok(ay)?|sure|please|go ahead|do it|haan|ha|ji|raise it)\b/i;
 
@@ -36,6 +36,7 @@ export function routeByRules(text: string, s: SupportState): RouteDecision | nul
   if (TICKET_REF.test(t) || STATUS.test(t)) return { agent: "status", method: "rules", reason: "ticket status" };
   if (PASSWORD.test(t)) return { agent: "password", method: "rules", reason: "password / account" };
   if (ACCESS.test(t)) return { agent: "access", method: "rules", reason: "access request" };
+  if (s.awaitingAccessApp && !SMALL_TALK.test(t)) return { agent: "access", method: "rules", reason: "named the app" };
   if (SMALL_TALK.test(t)) return { agent: "chat", method: "rules", reason: "small talk" };
   if (s.steps.length && !s.resolvedByAssistant && !s.escalationReason) {
     return { agent: "knowledge", method: "rules", reason: "active guide" };
@@ -77,4 +78,53 @@ export function decide({ route, base, state, ticketDenied, clarifyingQuestion }:
   if (route?.agent === "chat" && (base.kind === "find_article" || base.kind === "resolved")) return { kind: "chat" };
   if (!route && base.kind === "find_article") return { kind: "llm_route" };
   return base;
+}
+
+// ─────────────────────────── Phase 6: access & password quick actions ───────────────────────────
+
+/** The Access agent's answer (subset) → this turn's action. */
+export function accessAction(
+  o: { applicationName: string | null; alreadyHasAccess: boolean; openRequest: { number: string } | null; clarifyingQuestion: string | null } | null,
+): NextAction {
+  if (!o) return { kind: "redirect", to: "access" };
+  if (!o.applicationName) return { kind: "access_info", info: "which_app", question: o.clarifyingQuestion ?? "Which app do you need access to?" };
+  if (o.alreadyHasAccess) return { kind: "access_info", info: "has_access", app: o.applicationName };
+  if (o.openRequest) return { kind: "access_info", info: "open_request", app: o.applicationName, number: o.openRequest.number };
+  return { kind: "access_submit" };
+}
+
+/** Starting a password reset → this turn's action. */
+export function passwordAction(
+  r: { ok: true; maskedEmail: string; accountLocked: boolean } | { ok: false; reason: "rate_limited" | "disabled" | "no_account" } | null,
+): NextAction {
+  if (!r) return { kind: "password_blocked", reason: "error" };
+  return r.ok ? { kind: "password_verify", maskedEmail: r.maskedEmail, accountLocked: r.accountLocked } : { kind: "password_blocked", reason: r.reason };
+}
+
+/**
+ * Continuations after the user answered one of the Phase 6 cards (approval or code). The server's
+ * own state decides — a client can't claim it verified a code.
+ */
+export function afterToolAction(lastTool: UiPart | undefined, s: SupportState): NextAction | null {
+  if (!lastTool) return null;
+  const out = (lastTool.output ?? {}) as Record<string, unknown>;
+  switch (lastTool.type) {
+    case "tool-submitAccessRequest":
+      if (lastTool.state === "output-denied") return { kind: "access_cancelled" };
+      if (lastTool.state === "output-available" && typeof out.number === "string") {
+        return { kind: "access_done", number: out.number, app: String(out.application ?? "the app"), approver: (out.approver as string | null) ?? null, existing: !!out.existing };
+      }
+      return lastTool.state === "output-available" ? { kind: "redirect", to: "access" } : null;
+    case `tool-${VERIFY_TOOL}`:
+      if (lastTool.state !== "output-available") return null;
+      return s.passwordReset?.stage === "verified" ? { kind: "password_confirm" } : { kind: "password_blocked", reason: "verify_failed" };
+    case "tool-resetPassword":
+      if (lastTool.state === "output-denied") return { kind: "password_cancelled" };
+      if (lastTool.state !== "output-available") return null;
+      return out.done === true
+        ? { kind: "password_done", maskedEmail: String(out.emailedTo ?? "your email"), unlocked: !!out.unlocked }
+        : { kind: "password_blocked", reason: "error" };
+    default:
+      return null;
+  }
 }

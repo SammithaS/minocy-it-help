@@ -8,9 +8,11 @@ export { SupportAgent } from "./agents/support-agent";
 export { TicketBoard } from "./durable/ticket-board";
 export { TriageAgent } from "./agents/triage-agent";
 export { TicketWorkflow } from "./workflows/ticket-workflow";
+export { AccessRequestWorkflow } from "./workflows/access-workflow";
 export { KnowledgeAgent } from "./agents/specialists/knowledge-agent";
 export { PingAgent } from "./agents/specialists/ping-agent";
 export { TicketAgent } from "./agents/specialists/ticket-agent";
+export { AccessAgent } from "./agents/specialists/access-agent";
 
 export default {
   async fetch(request, env, ctx) {

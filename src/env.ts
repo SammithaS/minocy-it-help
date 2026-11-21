@@ -11,6 +11,8 @@ export interface Secrets {
   TRIAGE_DAILY_BUDGET?: string;
   CONFIRM_TIMEOUT_DAYS?: string;
   IT_ADMIN_EMAIL?: string;
+  /** Days a manager has to approve an access request before it expires (default 7). */
+  ACCESS_APPROVAL_DAYS?: string;
 }
 
 export type AppEnv = Env & Secrets;

@@ -9,3 +9,5 @@ EMAIL_FROM=help@yourdomain
 BETTER_AUTH_SECRET=change-me-to-a-long-random-string
 APP_URL=http://localhost:5173
 IT_ADMIN_EMAIL=
+# Days a manager has to approve an access request (default 7)
+ACCESS_APPROVAL_DAYS=

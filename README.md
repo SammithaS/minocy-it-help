@@ -22,7 +22,8 @@ Sign in with a seeded account — no real email needed locally. The 6-digit code
 
 | Role | Email |
 |---|---|
-| Employee | `ananya.sharma@minocy.example` (+7 more) |
+| Employee | `ananya.sharma@minocy.example` (+7 more; `rohan.das@…` has a **locked** directory account for the reset demo, `meera.krishnan@…` already has Figma) |
+| Manager (approves access) | `deepa.menon@…` (Finance, HR, Ops), `nikhil.bose@…` (Sales, Marketing), `lakshmi.pillai@…` (Design, Engineering) |
 | IT Agent | `arjun.mehta@minocy.example` (Network), `priya.nair@…` (Hardware), `rahul.verma@…` (Software), `sneha.iyer@…` (Identity & Access), `vikram.singh@…` (Collaboration) |
 | IT Admin | `admin@minocy.example` |
 
@@ -70,6 +71,8 @@ done
 ## Email
 
 `EMAIL_TRANSPORT=log` (default) renders every email and stores it in the admin **Outbox** (`/console/outbox`) — no domain or accounts needed. For real sending, set up a domain on Cloudflare (Email Routing + verified team mailboxes) and Resend, then set `EMAIL_TRANSPORT=live`.
+
+Password-reset codes and set-password links are sent like any other email, but the Outbox keeps only their subject and recipient (admins mustn't read them); in `log` mode their text is printed in the `pnpm dev` terminal, like sign-in codes. Manager approval emails are normal Outbox entries — open one and click **Approve** to finish an access request locally.
 
 Simulate inbound email locally:
 

@@ -11,13 +11,18 @@ import {
   type HandoffEvent,
   initialSupportState,
   STEP_TOOL,
+  VERIFY_TOOL,
   type GuideStep,
   type StepOutcome,
   type SupportState,
 } from "../../../../src/agents/state";
 import type { Priority } from "@/components/ui/badge";
 import { MdText } from "./md-text";
+import { AccessDraftCard, AccessSubmittedCard, ResetCodeCard, ResetConfirmCard, ResetDoneCard, StatusLine } from "./action-cards";
 import { TicketDraftCard, TicketRaisedCard } from "./ticket-cards";
+
+/** Tools that ask the user to approve before they run (approval cards). */
+const APPROVAL_TOOLS = new Set(["tool-createTicket", "tool-submitAccessRequest", "tool-resetPassword"]);
 
 interface ToolPart {
   type: string;
@@ -81,12 +86,47 @@ export function ChatPanel({
 
   const pendingApproval = useMemo(() => {
     for (const m of messages)
-      for (const p of m.parts) if (isTool(p) && p.type === "tool-createTicket" && p.state === "approval-requested") return p as ToolPart & { approval?: { id: string } };
+      for (const p of m.parts) if (isTool(p) && APPROVAL_TOOLS.has(p.type) && p.state === "approval-requested") return p as ToolPart & { approval?: { id: string } };
     return null;
   }, [messages]);
 
+  const pendingVerify = useMemo(() => {
+    for (const m of messages) for (const p of m.parts) if (isTool(p) && p.type === `tool-${VERIFY_TOOL}` && p.state === "input-available") return p;
+    return null;
+  }, [messages]);
+
+  function answerVerify(verified: boolean) {
+    if (!pendingVerify) return;
+    void addToolOutput({ tool: VERIFY_TOOL, toolCallId: pendingVerify.toolCallId, output: { verified } } as Parameters<typeof addToolOutput>[0]);
+  }
+
+  /** The code goes straight to the agent (RPC), never into the transcript. */
+  async function checkCode(code: string): Promise<string | null> {
+    const r = (await agent.call("checkResetCode", [code])) as { ok: boolean; error?: string; final?: boolean };
+    if (r.ok) {
+      answerVerify(true);
+      return null;
+    }
+    if (r.final) answerVerify(false);
+    return r.error ?? "That didn't work.";
+  }
+
+  async function approveAccess(justification: string): Promise<string | null> {
+    if (pendingApproval?.type !== "tool-submitAccessRequest" || !pendingApproval.approval) return "This request has expired. Ask me again.";
+    if (justification !== state.accessDraft?.justification) {
+      const r = (await agent.call("updateAccessDraft", [{ justification }])) as { ok: boolean; error?: string };
+      if (!r.ok) return r.error ?? "Couldn't save your reason.";
+    }
+    void addToolApprovalResponse({ id: pendingApproval.approval.id, approved: true });
+    return null;
+  }
+
+  function respondApproval(approved: boolean) {
+    if (pendingApproval?.approval) void addToolApprovalResponse({ id: pendingApproval.approval.id, approved });
+  }
+
   async function approveTicket(edited: Parameters<React.ComponentProps<typeof TicketDraftCard>["onApprove"]>[0]): Promise<string | null> {
-    if (!pendingApproval?.approval) return "This draft has expired. Ask me to raise the ticket again.";
+    if (pendingApproval?.type !== "tool-createTicket" || !pendingApproval.approval) return "This draft has expired. Ask me to raise the ticket again.";
     const d = state.ticketDraft;
     const changed = !d || d.title !== edited.title || d.summary !== edited.summary || d.category !== edited.category || d.priority !== edited.priority;
     if (changed) {
@@ -110,6 +150,11 @@ export function ChatPanel({
     const text = (override ?? input).trim();
     if (!text) return;
     setInput("");
+    // A code typed into the main box still goes only to the verifier, never into the chat.
+    if (pendingVerify && /^\d{6}$/.test(text.replace(/\s/g, ""))) {
+      void checkCode(text.replace(/\s/g, ""));
+      return;
+    }
     if (pendingStep) answerStep(pendingStep, outcomeFromText(text));
     else void sendMessage({ role: "user", parts: [{ type: "text", text }] });
   }
@@ -122,6 +167,7 @@ export function ChatPanel({
     !busy &&
     !dismissedEscalation &&
     !pendingStep &&
+    !pendingVerify &&
     messages.length > 0;
 
   return (
@@ -162,6 +208,10 @@ export function ChatPanel({
             onAnswer={answerStep}
             onApproveTicket={approveTicket}
             onCancelTicket={cancelTicket}
+            onApproveAccess={approveAccess}
+            onRespondApproval={respondApproval}
+            onCheckCode={checkCode}
+            onGiveUpCode={() => answerVerify(false)}
             disabled={busy}
           />
         ))}
@@ -213,7 +263,7 @@ export function ChatPanel({
           id={`chat-${sessionId}`}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={pendingStep ? "Or tell me what happened…" : "Describe the problem…"}
+          placeholder={pendingVerify ? "Type the code in the card above" : pendingStep ? "Or tell me what happened…" : "Describe the problem…"}
           autoComplete="off"
           className="min-h-11 min-w-0 flex-1 rounded-full border border-control bg-card px-4 text-[15px] text-ink placeholder:text-muted focus:border-brand-700 focus:outline-none"
         />
@@ -259,6 +309,10 @@ function Message({
   onAnswer,
   onApproveTicket,
   onCancelTicket,
+  onApproveAccess,
+  onRespondApproval,
+  onCheckCode,
+  onGiveUpCode,
   disabled,
 }: {
   message: UIMessage;
@@ -266,6 +320,10 @@ function Message({
   onAnswer: (part: ToolPart, outcome: StepOutcome) => void;
   onApproveTicket: React.ComponentProps<typeof TicketDraftCard>["onApprove"];
   onCancelTicket: () => void;
+  onApproveAccess: (justification: string) => Promise<string | null>;
+  onRespondApproval: (approved: boolean) => void;
+  onCheckCode: (code: string) => Promise<string | null>;
+  onGiveUpCode: () => void;
   disabled: boolean;
 }) {
   const steps = state.steps;
@@ -312,6 +370,51 @@ function Message({
               </p>
             );
           }
+          return null;
+        }
+        if (p.type === "tool-submitAccessRequest") {
+          if (p.state === "approval-requested" && state.accessDraft) {
+            return <AccessDraftCard key={p.toolCallId} draft={state.accessDraft} busy={disabled} onApprove={onApproveAccess} onCancel={() => onRespondApproval(false)} />;
+          }
+          if (p.state === "output-available" && p.output?.number) {
+            return (
+              <AccessSubmittedCard
+                key={p.toolCallId}
+                number={String(p.output.number)}
+                app={String(p.output.application ?? "")}
+                approver={(p.output.approver as string | null) ?? null}
+                existing={!!p.output.existing}
+              />
+            );
+          }
+          if (p.state === "output-denied") return <StatusLine key={p.toolCallId}>Access request cancelled</StatusLine>;
+          return null;
+        }
+        if (p.type === `tool-${VERIFY_TOOL}`) {
+          if (p.state === "input-available" && state.passwordReset?.stage === "code_sent") {
+            return <ResetCodeCard key={p.toolCallId} maskedEmail={state.passwordReset.maskedEmail} busy={disabled} onCheck={onCheckCode} onGiveUp={onGiveUpCode} />;
+          }
+          if (p.state === "output-available") {
+            return <StatusLine key={p.toolCallId}>{p.output?.verified ? "✓ Identity confirmed" : "Couldn't confirm the code"}</StatusLine>;
+          }
+          return null;
+        }
+        if (p.type === "tool-resetPassword") {
+          if (p.state === "approval-requested" && state.passwordReset?.stage === "verified") {
+            return (
+              <ResetConfirmCard
+                key={p.toolCallId}
+                accountLocked={state.passwordReset.accountLocked}
+                busy={disabled}
+                onApprove={() => onRespondApproval(true)}
+                onCancel={() => onRespondApproval(false)}
+              />
+            );
+          }
+          if (p.state === "output-available" && p.output?.done) {
+            return <ResetDoneCard key={p.toolCallId} emailedTo={String(p.output.emailedTo ?? "your email")} unlocked={!!p.output.unlocked} />;
+          }
+          if (p.state === "output-denied") return <StatusLine key={p.toolCallId}>Password reset cancelled — nothing changed</StatusLine>;
           return null;
         }
         if (p.type === "tool-searchKnowledgeBase") {

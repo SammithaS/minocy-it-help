@@ -45,6 +45,24 @@ export interface TicketEvent {
   created_at: number;
 }
 
+export interface AccessRequest {
+  id: string;
+  number: string;
+  application: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "PROVISIONED" | "EXPIRED";
+  justification: string;
+  decisionNote: string | null;
+  approver: string | null;
+  createdAt: number;
+  decidedAt: number | null;
+  provisionedAt: number | null;
+}
+
+export const myAccessRequestsQuery = queryOptions({
+  queryKey: ["access-requests", "mine"],
+  queryFn: () => apiFetch<{ requests: AccessRequest[] }>("/access-requests").then((r) => r.requests),
+});
+
 export const myTicketsQuery = queryOptions({
   queryKey: ["tickets", "mine"],
   queryFn: () => apiFetch<{ tickets: Ticket[] }>("/tickets").then((r) => r.tickets),

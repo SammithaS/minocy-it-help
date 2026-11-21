@@ -1,8 +1,10 @@
 import { tool } from "ai";
 import { z } from "zod";
 import type { AppEnv } from "../env";
+import { listAccessRequests, submitAccessRequest } from "../lib/access";
+import { completePasswordReset } from "../lib/password-reset";
 import { createTicket, notifyBoard } from "../lib/tickets";
-import { STEP_TOOL, type Priority, type SupportState } from "./state";
+import { STEP_TOOL, VERIFY_TOOL, type Priority, type SupportState } from "./state";
 
 export interface ToolContext {
   env: AppEnv;
@@ -13,7 +15,17 @@ export interface ToolContext {
   /** Hand-offs to specialist agents (logged and shown as chips). */
   askKnowledgeAgent: (query: string) => Promise<{ articleId: string | null; title: string | null; clarifyingQuestion: string | null; reason: string }>;
   askTicketAgent: () => Promise<{ ok: boolean; error?: string }>;
+  /** Model-chosen hand-off to the Access agent; returns what to do next. */
+  askAccessAgent: (request: string) => Promise<{ guidance: string }>;
 }
+
+const ACCESS_STATUS_LABEL: Record<string, string> = {
+  PENDING: "waiting for approval",
+  APPROVED: "approved — being set up",
+  PROVISIONED: "done — access granted",
+  REJECTED: "not approved",
+  EXPIRED: "expired (no answer in time)",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   NEW: "new — waiting for the IT team",
@@ -110,6 +122,67 @@ export function buildTools(ctx: ToolContext) {
           priority: created.priority,
           slaDueAt: new Date(created.slaDueAt).toISOString(),
         };
+      },
+    }),
+
+    // ── access requests (Access agent → approval card → AccessRequestWorkflow) ──
+    askAccessAgent: tool({
+      description: "Hand over to the Access agent when the user wants access, a licence or permissions for an app or shared drive.",
+      inputSchema: z.object({ request: z.string().min(2).max(500).describe("What they asked for, in their words") }),
+      execute: async ({ request }) => ctx.askAccessAgent(request),
+    }),
+
+    submitAccessRequest: tool({
+      description:
+        "Send the access request the Access agent prepared. The user sees an approval card (app, approver, their reason) and must approve it — call this, don't ask in text.",
+      inputSchema: z.object({}),
+      needsApproval: true,
+      execute: async () => {
+        const s = ctx.getState();
+        if (!s.accessDraft || !ctx.ownerId) return { error: "No access request prepared. Ask the Access agent first." };
+        const r = await submitAccessRequest(ctx.env, {
+          requesterId: ctx.ownerId,
+          applicationId: s.accessDraft.applicationId,
+          justification: s.accessDraft.justification,
+          sessionId: ctx.sessionId,
+        });
+        if (!r.ok) return { error: r.error };
+        ctx.setState({ ...ctx.getState(), accessRequestNumber: r.number, accessDraft: null, awaitingAccessApp: false });
+        return { number: r.number, application: r.application, approver: r.approver?.name ?? null, status: r.status, existing: r.existing ?? false };
+      },
+    }),
+
+    getMyAccessRequests: tool({
+      description: "List the user's access requests (REQ-…) and their status.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = ctx.ownerId ? await listAccessRequests(ctx.env, ctx.ownerId, 10) : [];
+        return {
+          requests: rows.map((r) => ({ number: r.number, app: r.application, status: ACCESS_STATUS_LABEL[r.status] ?? r.status, approver: r.approver_name ?? r.approver_email, note: r.decision_note })),
+        };
+      },
+    }),
+
+    // ── self-service password reset (deterministic; no specialist model call) ──
+    [VERIFY_TOOL]: tool({
+      description: "Show the card where the user types the 6-digit code we emailed them. Wait for it. Never ask for the code in chat.",
+      inputSchema: z.object({}),
+      outputSchema: z.object({ verified: z.boolean() }),
+      // No execute: the browser card verifies through the agent's checkResetCode() and answers { verified }.
+    }),
+
+    resetPassword: tool({
+      description:
+        "Unlock the account and email a one-time link to set a new password. The user approves in a card first — call this, don't ask in text.",
+      inputSchema: z.object({}),
+      needsApproval: true,
+      execute: async () => {
+        const s = ctx.getState();
+        if (!s.passwordReset || s.passwordReset.stage === "code_sent" || !ctx.ownerId) return { done: false, error: "Identity not verified." };
+        const r = await completePasswordReset(ctx.env, { resetId: s.passwordReset.id, userId: ctx.ownerId });
+        if (!r.ok) return { done: false, error: r.reason === "expired" ? "The verification timed out. Start again." : "Couldn't reset the password." };
+        ctx.setState({ ...ctx.getState(), passwordReset: { ...s.passwordReset, stage: "done" } });
+        return { done: true, emailedTo: r.maskedEmail, unlocked: r.unlocked };
       },
     }),
 

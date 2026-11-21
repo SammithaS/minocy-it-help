@@ -18,6 +18,7 @@ export default defineConfig(async () => {
             PING_AGENT: { className: "PingAgent", useSQLite: true },
             KNOWLEDGE_AGENT: { className: "KnowledgeAgent", useSQLite: true },
             TICKET_AGENT: { className: "TicketAgent", useSQLite: true },
+            ACCESS_AGENT: { className: "AccessAgent", useSQLite: true },
           },
           bindings: {
             TEST_MIGRATIONS: migrations,
