@@ -13,4 +13,3 @@ playwright-report
 .promptfoo
 evals/results
 .tanstack
-wrangler.remote-ingest.jsonc

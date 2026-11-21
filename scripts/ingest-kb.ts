@@ -3,7 +3,7 @@
  *
  *   pnpm kb:ingest            # local D1 + your Cloudflare account's Vectorize/Workers AI
  *   pnpm kb:ingest --force    # re-embed everything, and overwrite articles edited in the console
- *   pnpm kb:ingest --remote   # write to the deployed (remote) D1 instead of local — see README
+ *   pnpm kb:ingest --remote   # also copy the KB rows to the deployed (remote) D1 — see README → Deploy
  *
  * Runs locally (not in a Worker request) because chunking + embedding 20 articles would blow the
  * Free plan's per-request CPU budget. Idempotent: articles whose content hash hasn't changed are
@@ -11,6 +11,7 @@
  * (managed_by = "console") are left alone unless --force — the console version is newer.
  * Uses the same indexing code as KbReindexWorkflow (src/lib/kb-index.ts).
  */
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getPlatformProxy } from "wrangler";
 import { articleStatements, contentHash, prepareArticle, vectorRecords } from "../src/lib/kb-index";
@@ -20,25 +21,34 @@ import { parseArticle, readKbDir, unknownPlaceholders } from "./lib/kb-parse";
 const force = process.argv.includes("--force");
 const remote = process.argv.includes("--remote");
 
-/** --remote: a copy of wrangler.jsonc with the D1 binding marked remote (Vectorize / AI already are). */
-function configPath(): string {
-  if (!remote) return "wrangler.jsonc";
-  const src = readFileSync("wrangler.jsonc", "utf8")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//"))
-    .join("\n");
-  const cfg = JSON.parse(src) as { d1_databases: { database_id: string; remote?: boolean }[] };
-  if (cfg.d1_databases[0]!.database_id.startsWith("00000000")) throw new Error("Set the real D1 database_id in wrangler.jsonc first (see README).");
-  cfg.d1_databases = cfg.d1_databases.map((d) => ({ ...d, remote: true }));
+/**
+ * --remote: after the normal (local) ingest — which also upserts the shared Vectorize index — copy the
+ * KB rows (articles, steps, full-text index) from local D1 to the production D1 with
+ * `wrangler d1 execute --remote --file`. Overwrites production KB rows, including console edits.
+ */
+async function copyKbToRemote(db: D1Database) {
+  const cfg = readFileSync("wrangler.jsonc", "utf8");
+  if (/"database_id":\s*"00000000/.test(cfg)) throw new Error("Set the real D1 database_id in wrangler.jsonc first (README → Deploy).");
+  const q = (v: unknown) => (v === null || v === undefined ? "NULL" : typeof v === "number" ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
+  const rows = async (sql: string) => (await db.prepare(sql).all<Record<string, unknown>>()).results;
+  const insert = (table: string, r: Record<string, unknown>) => `INSERT INTO ${table} (${Object.keys(r).map((k) => `"${k}"`).join(", ")}) VALUES (${Object.values(r).map(q).join(", ")});`;
+  const sql = [
+    "DELETE FROM kb_fts;",
+    "DELETE FROM kb_steps;",
+    "DELETE FROM kb_articles;",
+    ...(await rows("SELECT * FROM kb_articles")).map((r) => insert("kb_articles", r)),
+    ...(await rows('SELECT article_id, section, "order", text FROM kb_steps')).map((r) => insert("kb_steps", r)),
+    ...(await rows("SELECT chunk_id, article_id, section, title, tags, content FROM kb_fts")).map((r) => insert("kb_fts", r)),
+  ];
   mkdirSync(".wrangler", { recursive: true });
-  // Kept next to wrangler.jsonc so relative paths (main, migrations) still resolve.
-  writeFileSync("wrangler.remote-ingest.jsonc", JSON.stringify(cfg, null, 2));
-  return "wrangler.remote-ingest.jsonc";
+  writeFileSync(".wrangler/kb-remote.sql", sql.join("\n") + "\n");
+  console.log(`→ copying ${sql.length - 3} KB rows to the REMOTE D1 database`);
+  const r = spawnSync("pnpm", ["exec", "wrangler", "d1", "execute", "DB", "--remote", "--yes", "--file=.wrangler/kb-remote.sql"], { stdio: "inherit", shell: true });
+  if (r.status !== 0) throw new Error("wrangler d1 execute --remote failed");
 }
 
 type ProxyEnv = { DB: D1Database; AI: Ai; VECTORIZE: VectorizeIndex };
-const { env, dispose } = await getPlatformProxy<ProxyEnv>({ configPath: configPath() });
-if (remote) console.log("→ writing to the REMOTE D1 database");
+const { env, dispose } = await getPlatformProxy<ProxyEnv>({ configPath: "wrangler.jsonc" });
 
 try {
   const files = readKbDir();
@@ -90,6 +100,7 @@ try {
     `✓ ${articles.length} articles: ${changed} ingested, ${articles.length - changed - keptConsole.length} unchanged, ${removed.length} removed.` +
       (changed ? " Vectorize applies upserts asynchronously — allow a few seconds before searching." : ""),
   );
+  if (remote) await copyKbToRemote(env.DB);
 } finally {
   await dispose();
 }

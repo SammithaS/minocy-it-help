@@ -13,8 +13,10 @@
     {
       "binding": "DB",
       "database_name": "minocy-it-help",
-      // Placeholder for local dev; replaced with the real id at deploy time.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Production database (wrangler d1 create). Not a secret.
+      "database_id": "6f838758-cfcd-49d1-952b-a120ee41e762",
+      // Local dev / tests keep using their own local database.
+      "preview_database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
   ],
@@ -49,7 +51,7 @@
   // Daily digest to IT admins at 09:00 IST (03:30 UTC).
   "triggers": { "crons": ["30 3 * * *"] },
   "vars": {
-    "APP_URL": "http://localhost:5173",
+    "APP_URL": "https://minocy-it-help.sammithas318.workers.dev",
     "EMAIL_FROM": "help@minocy.example",
     // "log" = render + store in the console Outbox only (no domain needed).
     // "live" = team mail via Email Service, employee mail via Resend (needs a domain; see docs).
