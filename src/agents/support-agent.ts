@@ -469,6 +469,22 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
           writer.write({ type: "text-end", id: "reply" });
           return;
         }
+        // The next guide step is decided by the rules, so the server shows its card directly — a model
+        // could reply in text and forget the card, leaving the employee with nothing to answer.
+        if (action.kind === "show_step") {
+          const s = this.state;
+          const lead =
+            action.stepNumber === 1
+              ? `I found a guide for this: **${s.articleTitle ?? "the IT guide"}**. Let's go one step at a time — tell me how each one goes.`
+              : s.steps[action.stepNumber - 2]?.status === "failed"
+                ? "Okay, that didn't fix it. Let's try the next step."
+                : "Let's try the next step.";
+          writer.write({ type: "text-start", id: "lead" });
+          writer.write({ type: "text-delta", id: "lead", delta: lead });
+          writer.write({ type: "text-end", id: "lead" });
+          writer.write({ type: "tool-input-available", toolCallId: `step-${action.stepNumber}-${crypto.randomUUID()}`, toolName: STEP_TOOL, input: { stepNumber: action.stepNumber } });
+          return;
+        }
         if (forced) {
           writer.write({ type: "text-start", id: "lead" });
           writer.write({ type: "text-delta", id: "lead", delta: forced.lead });
