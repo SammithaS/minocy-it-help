@@ -210,7 +210,7 @@ Optional tuning secrets/vars: `AI_GATEWAY_ID` (defaults to the auto-created `def
 ### 6. Deploy
 
 ```bash
-pnpm deploy          # typecheck → tests → build → wrangler deploy
+pnpm run deploy      # typecheck → tests → build → wrangler deploy
 ```
 
 `wrangler deploy` creates the Durable Object classes (migrations `v1`–`v4`), the three Workflows
