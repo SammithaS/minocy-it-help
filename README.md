@@ -71,7 +71,7 @@ Sign in with a seeded account — no real email needed locally. The 6-digit code
 | Employee | `ananya.sharma@minocy.example` (+7 more; `rohan.das@…` has a **locked** directory account for the reset demo, `meera.krishnan@…` already has Figma) |
 | Manager (approves access) | `deepa.menon@…` (Finance, HR, Ops), `nikhil.bose@…` (Sales, Marketing), `lakshmi.pillai@…` (Design, Engineering) |
 | IT Agent | `arjun.mehta@minocy.example` (Network), `priya.nair@…` (Hardware), `rahul.verma@…` (Software), `sneha.iyer@…` (Identity & Access), `vikram.singh@…` (Collaboration) |
-| IT Admin | `admin@minocy.example`, `owner@example.com` |
+| IT Admin | `admin@minocy.example`, plus your own address if you seed with `SEED_OWNER_EMAIL=you@example.com SEED_OWNER_NAME="Your Name" pnpm db:seed` |
 
 ## Use it from Claude (MCP)
 

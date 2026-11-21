@@ -10,6 +10,7 @@ import { org, TEAMS } from "../src/org-config";
 
 const mailboxTemplate = process.env.SEED_MAILBOX_TEMPLATE ?? `it-{team}@${org.emailDomain}`;
 const adminEmail = process.env.SEED_ADMIN_EMAIL ?? `admin@${org.emailDomain}`;
+const ownerEmail = process.env.SEED_OWNER_EMAIL?.trim().toLowerCase() || null;
 
 type Role = "employee" | "agent" | "admin";
 interface SeedUser {
@@ -29,7 +30,8 @@ const at = (local: string) => `${local}@${org.emailDomain}`;
 
 const users: SeedUser[] = [
   { id: "u-admin", name: "Kavya Rao", email: adminEmail, role: "admin", department: "IT", location: "Bengaluru", teams: TEAMS.map((t) => t.id) },
-  { id: "u-sammitha", name: "Sammitha S Poojary", email: "owner@example.com", role: "admin", department: "IT", location: "Bengaluru", teams: TEAMS.map((t) => t.id) },
+  // Your own admin account: SEED_OWNER_EMAIL=you@example.com (kept out of the repo).
+  ...(ownerEmail ? [{ id: "u-sammitha", name: process.env.SEED_OWNER_NAME ?? "IT Owner", email: ownerEmail, role: "admin" as const, department: "IT", location: "Bengaluru", teams: TEAMS.map((t) => t.id) }] : []),
   { id: "u-agent-net", name: "Arjun Mehta", email: at("arjun.mehta"), role: "agent", department: "IT", location: "Bengaluru", teams: ["team-network"] },
   { id: "u-agent-hw", name: "Priya Nair", email: at("priya.nair"), role: "agent", department: "IT", location: "Pune", teams: ["team-hardware"] },
   { id: "u-agent-sw", name: "Rahul Verma", email: at("rahul.verma"), role: "agent", department: "IT", location: "Bengaluru", teams: ["team-software"] },
@@ -142,4 +144,4 @@ sql.push(`INSERT INTO counters (name, value) VALUES ('access', 1000) ON CONFLICT
 mkdirSync(".wrangler", { recursive: true });
 writeFileSync(".wrangler/seed.sql", sql.join("\n") + "\n");
 console.log(`Wrote .wrangler/seed.sql (${users.length} users, ${TEAMS.length} teams)`);
-console.log("Sign in with e.g.", users.find((u) => u.role === "employee" && u.device)!.email, "(employee),", users[1]!.email, "(agent),", adminEmail, "(admin)");
+console.log("Sign in with e.g.", users.find((u) => u.role === "employee" && u.device)!.email, "(employee),", users.find((u) => u.role === "agent")!.email, "(agent),", adminEmail, "(admin)");
