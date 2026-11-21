@@ -93,7 +93,7 @@ export function AccessDraftCard({
           onChange={(e) => setWhy(e.target.value)}
         />
       </label>
-      {!ok && why.length > 0 && <p className="mt-1 text-xs text-muted">A few more words, please (10+ characters).</p>}
+      {why.trim().length > 0 && why.trim().length < 10 && <p className="mt-1 text-xs text-muted">A few more words, please (10+ characters).</p>}
       <ErrorLine error={error} />
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="button" onClick={send} disabled={busy || saving || !ok} className={primary}>
