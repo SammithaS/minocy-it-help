@@ -29,6 +29,7 @@ const at = (local: string) => `${local}@${org.emailDomain}`;
 
 const users: SeedUser[] = [
   { id: "u-admin", name: "Kavya Rao", email: adminEmail, role: "admin", department: "IT", location: "Bengaluru", teams: TEAMS.map((t) => t.id) },
+  { id: "u-sammitha", name: "Sammitha S Poojary", email: "owner@example.com", role: "admin", department: "IT", location: "Bengaluru", teams: TEAMS.map((t) => t.id) },
   { id: "u-agent-net", name: "Arjun Mehta", email: at("arjun.mehta"), role: "agent", department: "IT", location: "Bengaluru", teams: ["team-network"] },
   { id: "u-agent-hw", name: "Priya Nair", email: at("priya.nair"), role: "agent", department: "IT", location: "Pune", teams: ["team-hardware"] },
   { id: "u-agent-sw", name: "Rahul Verma", email: at("rahul.verma"), role: "agent", department: "IT", location: "Bengaluru", teams: ["team-software"] },
