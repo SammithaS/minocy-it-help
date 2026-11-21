@@ -2,8 +2,8 @@ import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { Link } from "@tanstack/react-router";
 import { useAgent } from "agents/react";
 import type { UIMessage } from "ai";
-import { AlertTriangle, ArrowUp, BookOpen, Check, GitBranch, Loader2, Sparkles, Ticket, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { AlertTriangle, ArrowUp, BookOpen, Check, Loader2, Sparkles, Ticket, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { InlineMd } from "@/components/inline-md";
 import { cn } from "@/lib/utils";
 import {
@@ -12,12 +12,14 @@ import {
   initialSupportState,
   STEP_TOOL,
   VERIFY_TOOL,
+  type FollowUpPart,
   type GuideStep,
   type StepOutcome,
   type SupportState,
 } from "../../../../src/agents/state";
 import type { Priority } from "@/components/ui/badge";
 import { MdText } from "./md-text";
+import { FeedbackBar, FollowUpCard, HandoffChip } from "./chat-extras";
 import { AccessDraftCard, AccessSubmittedCard, ResetCodeCard, ResetConfirmCard, ResetDoneCard, StatusLine } from "./action-cards";
 import { TicketDraftCard, TicketRaisedCard } from "./ticket-cards";
 
@@ -47,11 +49,14 @@ export function ChatPanel({
   initialMessage,
   onInitialMessageSent,
   className,
+  headerActions,
 }: {
   sessionId: string;
   initialMessage?: string;
   onInitialMessageSent?: () => void;
   className?: string;
+  /** Extra buttons in the header (the dock's new / expand / minimise). */
+  headerActions?: ReactNode;
 }) {
   const [state, setState] = useState<SupportState>(initialSupportState);
   const [dismissedEscalation, setDismissedEscalation] = useState(false);
@@ -170,6 +175,11 @@ export function ChatPanel({
     !pendingVerify &&
     messages.length > 0;
 
+  // 👍/👎 once the conversation reached an outcome (fixed, ticket raised, access requested, password reset).
+  const reachedOutcome =
+    state.resolvedByAssistant || !!state.ticketNumber || !!state.accessRequestNumber || state.passwordReset?.stage === "done";
+  const showFeedback = reachedOutcome && !busy && !pendingApproval && !pendingStep && !pendingVerify && messages.length > 1;
+
   return (
     <section
       aria-label="Ask IT chat"
@@ -191,7 +201,8 @@ export function ChatPanel({
                   : "Fixes from the IT guides · a person if you need one"}
           </p>
         </div>
-        <span className={cn("ml-auto size-2.5 rounded-full", agent.identified ? "bg-[#4ADE80]" : "bg-white/30")} title={agent.identified ? "Connected" : "Connecting"} />
+        <span className={cn("ml-auto size-2.5 shrink-0 rounded-full", agent.identified ? "bg-[#4ADE80]" : "bg-white/30")} title={agent.identified ? "Connected" : "Connecting"} />
+        {headerActions && <div className="-mr-2 flex shrink-0 items-center">{headerActions}</div>}
       </header>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-chat-bg px-4 py-5" aria-live="polite">
@@ -212,6 +223,8 @@ export function ChatPanel({
             onRespondApproval={respondApproval}
             onCheckCode={checkCode}
             onGiveUpCode={() => answerVerify(false)}
+            onQuickReply={(t) => submit(undefined, t)}
+            answeredFollowUp={messages.at(-1)?.id !== m.id}
             disabled={busy}
           />
         ))}
@@ -221,6 +234,7 @@ export function ChatPanel({
             Something went wrong{error?.message ? `: ${error.message}` : ""}. Try sending your message again.
           </p>
         )}
+        {showFeedback && <FeedbackBar sessionId={sessionId} onRaiseTicket={state.ticketNumber ? undefined : () => submit(undefined, "I'd like to raise a ticket with IT")} />}
         {showEscalation && (
           <div className="rounded-2xl border border-line bg-card p-4">
             <p className="flex items-center gap-2 text-sm font-bold">
@@ -290,19 +304,6 @@ function Typing() {
   );
 }
 
-function HandoffChip({ e }: { e: HandoffEvent }) {
-  return (
-    <p className={cn("flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold", e.status === "completed" ? "bg-canvas text-muted" : "bg-critical-bg text-critical")}>
-      <GitBranch className="size-3.5" />
-      <span>
-        Routed to <strong className="text-ink">{e.label}</strong>
-        {e.summary ? ` · ${e.summary}` : ""}
-      </span>
-      <span className="sr-only">({e.method === "rules" ? "by rule" : "by the router model"}, {e.ms} ms)</span>
-    </p>
-  );
-}
-
 function Message({
   message,
   state,
@@ -313,6 +314,8 @@ function Message({
   onRespondApproval,
   onCheckCode,
   onGiveUpCode,
+  onQuickReply,
+  answeredFollowUp,
   disabled,
 }: {
   message: UIMessage;
@@ -324,6 +327,9 @@ function Message({
   onRespondApproval: (approved: boolean) => void;
   onCheckCode: (code: string) => Promise<string | null>;
   onGiveUpCode: () => void;
+  onQuickReply: (text: string) => void;
+  /** A later message exists, so the follow-up's quick answers are spent. */
+  answeredFollowUp: boolean;
   disabled: boolean;
 }) {
   const steps = state.steps;
@@ -348,6 +354,9 @@ function Message({
           );
         }
         if (p.type === "data-handoff") return <HandoffChip key={i} e={(p as unknown as { data: HandoffEvent }).data} />;
+        if (p.type === "data-followup") {
+          return <FollowUpCard key={i} data={(p as unknown as { data: FollowUpPart }).data} answered={answeredFollowUp} disabled={disabled} onAnswer={onQuickReply} />;
+        }
         if (!isTool(p)) return null;
         if (p.type === "tool-createTicket") {
           if (p.state === "approval-requested" && state.ticketDraft && !state.ticketNumber) {

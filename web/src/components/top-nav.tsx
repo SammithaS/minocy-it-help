@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  MessageCircle,
   Moon,
   Settings,
   Ticket,
@@ -25,6 +26,7 @@ interface NavItem {
 export function navItemsFor(me: Me): NavItem[] {
   const employee: NavItem[] = [
     { to: "/", label: "Home", icon: Home },
+    { to: "/chat", label: "Ask IT", icon: MessageCircle },
     { to: "/tickets", label: "My tickets", icon: Ticket },
     { to: "/articles", label: "Guides", icon: BookOpen },
   ];

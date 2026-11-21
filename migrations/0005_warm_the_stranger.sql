@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `feedback_session_user` ON `feedback` (`session_id`,`user_id`);

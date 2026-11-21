@@ -85,6 +85,22 @@ export interface SupportState {
   /** The Access agent asked which app — the next message is the app name. */
   awaitingAccessApp: boolean;
   passwordReset: PasswordResetState | null;
+  /** 24 h "is it still working?" check after the assistant fixed something (Phase 7). */
+  followUp: FollowUpState | null;
+}
+
+export interface FollowUpState {
+  scheduleId: string;
+  /** What was fixed, e.g. the guide title. */
+  topic: string;
+  dueAt: number;
+  sent: boolean;
+}
+
+/** Persisted as a `data-followup` part on the check-in message; the chat shows two quick answers. */
+export interface FollowUpPart {
+  topic: string;
+  sentAt: number;
 }
 
 export const initialSupportState: SupportState = {
@@ -107,6 +123,7 @@ export const initialSupportState: SupportState = {
   accessRequestNumber: null,
   awaitingAccessApp: false,
   passwordReset: null,
+  followUp: null,
 };
 
 // ─────────────────────────── message inspection ───────────────────────────

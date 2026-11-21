@@ -1,4 +1,5 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useDock } from "@/components/chat/dock";
 import { useState, type FormEvent } from "react";
 import { AppWindow, ArrowRight, KeyRound, Laptop, LockKeyhole, Mail, Printer, Ticket, Wifi } from "lucide-react";
 import { TicketRow } from "@/components/tickets/ticket-row";
@@ -33,16 +34,18 @@ function greeting() {
 function Home() {
   const { me } = Route.useRouteContext();
   const first = me.user.name.split(" ")[0];
-  const navigate = useNavigate();
+  const dock = useDock();
   const { data: tickets = [] } = useQuery(myTicketsQuery);
   const open = tickets.filter((t) => isOpen(t.status));
   const [ask, setAsk] = useState("");
+  // Hero, chips and tiles hand the message to the supervisor in the docked chat (a full-screen sheet on phones).
   const startChat = (q: string) => {
-    if (q.trim()) void navigate({ to: "/chat", search: { q: q.trim() } });
+    if (q.trim()) dock.open(q.trim());
   };
   const onAsk = (e: FormEvent) => {
     e.preventDefault();
     startChat(ask);
+    setAsk("");
   };
 
   return (

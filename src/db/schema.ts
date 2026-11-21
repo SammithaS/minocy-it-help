@@ -298,16 +298,21 @@ export const notifications = sqliteTable("notifications", {
   createdAt: createdAt(),
 });
 
-export const feedback = sqliteTable("feedback", {
-  id: id(),
-  sessionId: text("session_id").notNull(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  rating: text("rating", { enum: ["up", "down"] }).notNull(),
-  comment: text("comment"),
-  createdAt: createdAt(),
-});
+/** 👍/👎 on a conversation (one per user per chat; changing your mind replaces it). */
+export const feedback = sqliteTable(
+  "feedback",
+  {
+    id: id(),
+    sessionId: text("session_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    rating: text("rating", { enum: ["up", "down"] }).notNull(),
+    comment: text("comment"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("feedback_session_user").on(t.sessionId, t.userId)],
+);
 
 export const applications = sqliteTable("applications", {
   id: id(),

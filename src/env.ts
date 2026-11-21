@@ -13,6 +13,8 @@ export interface Secrets {
   IT_ADMIN_EMAIL?: string;
   /** Days a manager has to approve an access request before it expires (default 7). */
   ACCESS_APPROVAL_DAYS?: string;
+  /** Hours after the assistant resolves a problem before it checks in (default 24). */
+  FOLLOW_UP_HOURS?: string;
 }
 
 export type AppEnv = Env & Secrets;

@@ -11,3 +11,5 @@ APP_URL=http://localhost:5173
 IT_ADMIN_EMAIL=
 # Days a manager has to approve an access request (default 7)
 ACCESS_APPROVAL_DAYS=
+# Hours before the assistant checks in after fixing something (default 24)
+FOLLOW_UP_HOURS=

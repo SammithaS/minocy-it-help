@@ -12,6 +12,8 @@ import { z } from "zod";
 import { PRIORITIES } from "../db/schema";
 import type { AppEnv } from "../env";
 import { justificationSchema } from "../lib/access";
+import { chatFollowUp } from "../email/chat-messages";
+import { sendEmail } from "../email/send";
 import { chatModel } from "../lib/llm";
 import { startPasswordReset, verifyResetCode } from "../lib/password-reset";
 import { TICKET_CATEGORIES } from "../org-config";
@@ -40,6 +42,7 @@ import { buildTools, type ToolName } from "./tools";
 interface SessionOwner {
   user_id: string;
   name: string;
+  email: string;
   department: string | null;
   location: string | null;
   model: string | null;
@@ -145,7 +148,7 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
 
   private async owner(): Promise<SessionOwner | null> {
     this.ownerCache ??= await this.env.DB.prepare(
-      `SELECT s.user_id, u.name, u.department, u.location, d.model, d.os, d.asset_tag
+      `SELECT s.user_id, u.name, u.email, u.department, u.location, d.model, d.os, d.asset_tag
        FROM chat_sessions s JOIN user u ON u.id = s.user_id
        LEFT JOIN devices d ON d.user_id = s.user_id
        WHERE s.id = ? LIMIT 1`,
@@ -389,6 +392,7 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
         ? { kind: "ticket_raised", ticketNumber: this.state.ticketNumber, justRaised: true }
         : (quick ?? decide({ route, base: nextAction(this.state, { lastUserText }), state: this.state, ticketDenied, clarifyingQuestion }));
     await this.touchSession(lastUserText, action.kind);
+    await this.syncFollowUp(action);
 
     const tools = buildTools({
       env: this.env,
@@ -537,6 +541,57 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
   async pingSpecialist(message: string) {
     const { PingAgent } = await import("./specialists/ping-agent");
     return this.runAgentTool<{ message: string }, { echo: string; at: number }>(PingAgent, { input: { message } });
+  }
+
+  // ───────────────────────────── 24 h follow-up ─────────────────────────────
+
+  /**
+   * Schedules a check-in when the assistant fixes something, and cancels it if the conversation turns
+   * into a ticket or an escalation first. One per conversation.
+   */
+  private async syncFollowUp(action: NextAction) {
+    const s = this.state;
+    const f = s.followUp;
+    if (action.kind === "resolved" && s.resolvedByAssistant && !s.ticketNumber && !f) {
+      const hours = Number(this.env.FOLLOW_UP_HOURS ?? 24);
+      const delay = Math.max(60, Math.round(hours * 3600));
+      const topic = s.articleTitle ?? "the fix";
+      const sched = await this.schedule(delay, "followUp", { topic });
+      this.setState({ ...this.state, followUp: { scheduleId: sched.id, topic, dueAt: Date.now() + delay * 1000, sent: false } });
+    } else if (f && !f.sent && (action.kind === "escalate" || s.ticketNumber)) {
+      await this.cancelSchedule(f.scheduleId);
+      this.setState({ ...this.state, followUp: null });
+    }
+  }
+
+  /** Scheduled callback: adds a check-in message to the chat and emails the employee. */
+  async followUp(payload: { topic: string }) {
+    const s = this.state;
+    if (!s.followUp || s.followUp.sent || s.ticketNumber || !s.resolvedByAssistant) return;
+    const owner = await this.owner();
+    if (!owner) return;
+    const sentAt = Date.now();
+    const message = {
+      id: `followup-${sentAt}`,
+      role: "assistant" as const,
+      parts: [
+        { type: "text" as const, text: `Hi ${owner.name.split(" ")[0]} — checking in on yesterday's fix (${payload.topic}). Is it still working?` },
+        { type: "data-followup" as const, data: { topic: payload.topic, sentAt } },
+      ],
+    };
+    await this.persistMessages([...(this.messages as UIMessage[]), message as unknown as UIMessage]);
+    this.setState({ ...this.state, followUp: { ...s.followUp, sent: true } });
+    try {
+      await sendEmail(this.env, chatFollowUp(this.env, owner.email, owner.name, payload.topic, this.name));
+    } catch (e) {
+      console.warn("[supervisor] follow-up email failed:", e instanceof Error ? e.message : e);
+    }
+    await this.env.DB.prepare(
+      `INSERT INTO agent_runs (id, session_id, user_id, agent, route_method, reason, status, summary, duration_ms, created_at)
+       VALUES (?, ?, ?, 'followup', 'rules', 'resolved 24 h ago', 'completed', ?, 0, ?)`,
+    )
+      .bind(crypto.randomUUID(), this.name, owner.user_id, payload.topic, sentAt)
+      .run();
   }
 
   /** Keeps the D1 summary row (title, outcome, article) in sync for history lists and analytics. */
