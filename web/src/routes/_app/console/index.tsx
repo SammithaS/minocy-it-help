@@ -1,20 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { BellRing, Inbox, X } from "lucide-react";
+import { BellRing, Inbox, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { TicketRow } from "@/components/tickets/ticket-row";
 import { PriorityBadge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { consoleQueueQuery, useBoardFeed, type BoardMessage } from "@/lib/tickets";
+import { queueQuery } from "@/lib/console";
+import { useBoardFeed, type BoardMessage } from "@/lib/tickets";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/console/")({
   validateSearch: z.object({
     scope: z.enum(["mine", "all"]).default("mine"),
-    status: z.enum(["open", "all"]).default("open"),
+    status: z.enum(["open", "all", "NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_ON_USER", "RESOLVED", "CLOSED"]).default("open"),
     team: z.string().optional(),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
+    assigned: z.enum(["any", "me", "unassigned"]).default("any"),
+    sla: z.enum(["any", "overdue", "soon"]).default("any"),
+    q: z.string().max(100).optional(),
   }),
   component: Console,
 });
@@ -31,7 +36,16 @@ function Console() {
   const { me } = Route.useRouteContext();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const { data, isPending } = useQuery(consoleQueueQuery(search));
+  const { data, isPending } = useQuery(queueQuery(search));
+  const [text, setText] = useState(search.q ?? "");
+  // Search as you type, debounced.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if ((search.q ?? "") !== text.trim()) void navigate({ search: { ...search, q: text.trim() || undefined }, replace: true });
+    }, 300);
+    return () => clearTimeout(id);
+  }, [text, search, navigate]);
+  const filtersOn = !!(search.priority || search.assigned !== "any" || search.sla !== "any" || search.q || (search.status !== "open" && search.status !== "all"));
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const isAdmin = me.user.role === "admin";
@@ -70,7 +84,7 @@ function Console() {
           </p>
         </div>
         <div className="flex gap-3 text-sm">
-          <Stat label="Open" value={tickets.length} />
+          <Stat label={search.status === "open" ? "Open" : "Shown"} value={tickets.length} />
           <Stat label="Overdue" value={breached} tone={breached ? "critical" : undefined} />
         </div>
       </div>
@@ -98,12 +112,61 @@ function Console() {
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="relative min-w-0 flex-1 basis-56">
+          <span className="sr-only">Search tickets</span>
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Search number, title or requester"
+            className="min-h-11 w-full rounded-full border border-control bg-card pr-4 pl-9 text-sm text-ink placeholder:text-muted focus:border-brand-700 focus:outline-none"
+          />
+        </label>
+        <FilterSelect
+          label="Priority"
+          value={search.priority ?? ""}
+          onChange={(v) => void navigate({ search: { ...search, priority: (v || undefined) as typeof search.priority } })}
+          options={[["", "Any priority"], ["CRITICAL", "Critical"], ["HIGH", "High"], ["MEDIUM", "Medium"], ["LOW", "Low"]]}
+        />
+        <FilterSelect
+          label="Assigned"
+          value={search.assigned}
+          onChange={(v) => void navigate({ search: { ...search, assigned: v as typeof search.assigned } })}
+          options={[["any", "Anyone"], ["me", "Assigned to me"], ["unassigned", "Unassigned"]]}
+        />
+        <FilterSelect
+          label="SLA"
+          value={search.sla}
+          onChange={(v) => void navigate({ search: { ...search, sla: v as typeof search.sla } })}
+          options={[["any", "Any SLA"], ["overdue", "Overdue"], ["soon", "Due in 2 h"]]}
+        />
+        <FilterSelect
+          label="Status"
+          value={search.status}
+          onChange={(v) => void navigate({ search: { ...search, status: v as typeof search.status } })}
+          options={[["open", "All open"], ["NEW", "New"], ["ASSIGNED", "Assigned"], ["IN_PROGRESS", "In progress"], ["WAITING_ON_USER", "Waiting on user"], ["RESOLVED", "Resolved"], ["CLOSED", "Closed"], ["all", "Everything"]]}
+        />
+        {filtersOn && (
+          <button
+            type="button"
+            onClick={() => {
+              setText("");
+              void navigate({ search: { scope: search.scope, team: search.team, status: "open", assigned: "any", sla: "any" } });
+            }}
+            className="min-h-11 px-3 text-sm font-bold text-brand-700"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       {isPending ? (
         <p className="text-sm text-muted">Loading queue…</p>
       ) : tickets.length === 0 ? (
         <Card className="flex items-center gap-3">
           <Inbox className="size-6 text-muted" />
-          <p className="text-sm text-muted">Queue is clear. New tickets will appear here instantly.</p>
+          <p className="text-sm text-muted">{filtersOn ? "No tickets match these filters." : "Queue is clear. New tickets will appear here instantly."}</p>
         </Card>
       ) : (
         <ul className="space-y-2.5">
@@ -144,6 +207,29 @@ function Console() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: [string, string][] }) {
+  const active = value !== options[0]![0];
+  return (
+    <label>
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "min-h-11 rounded-full border bg-card px-3.5 text-sm font-semibold focus:border-brand-700 focus:outline-none",
+          active ? "border-brand-700 text-brand-800" : "border-control text-ink",
+        )}
+      >
+        {options.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

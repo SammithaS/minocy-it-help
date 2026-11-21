@@ -1,9 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Play, ThumbsDown, ThumbsUp, UserPlus } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, Hourglass, Play, ThumbsDown, ThumbsUp, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
+import { assigneesQuery } from "@/lib/console";
 import type { Ticket } from "@/lib/tickets";
 
 function useTicketMutation(number: string) {
@@ -20,8 +21,10 @@ export function StaffActions({ ticket, meId }: { ticket: Ticket; meId: string })
   const post = useTicketMutation(ticket.number);
   const [resolving, setResolving] = useState(false);
   const [note, setNote] = useState("");
-  const assign = useMutation({ mutationFn: () => post(`/console/tickets/${ticket.number}/assign`, {}) });
+  const assign = useMutation({ mutationFn: (assigneeId?: string) => post(`/console/tickets/${ticket.number}/assign`, assigneeId ? { assigneeId } : {}) });
   const start = useMutation({ mutationFn: () => post(`/console/tickets/${ticket.number}/status`, { status: "IN_PROGRESS" }) });
+  const waiting = useMutation({ mutationFn: () => post(`/console/tickets/${ticket.number}/status`, { status: "WAITING_ON_USER" }) });
+  const { data: people = [] } = useQuery(assigneesQuery(ticket.number));
   const resolve = useMutation({
     mutationFn: () => post(`/console/tickets/${ticket.number}/resolve`, { note }),
     onSuccess: () => {
@@ -31,19 +34,43 @@ export function StaffActions({ ticket, meId }: { ticket: Ticket; meId: string })
   });
   const done = ticket.status === "RESOLVED" || ticket.status === "CLOSED";
   if (done) return null;
-  const error = assign.error ?? start.error ?? resolve.error;
+  const error = assign.error ?? start.error ?? waiting.error ?? resolve.error;
 
   return (
     <Card className="space-y-3">
       <div className="flex flex-wrap gap-2">
         {ticket.assignee?.id !== meId && (
-          <Button variant="outline" onClick={() => assign.mutate()} disabled={assign.isPending}>
+          <Button variant="outline" onClick={() => assign.mutate(undefined)} disabled={assign.isPending}>
             <UserPlus /> Assign to me
           </Button>
+        )}
+        {people.length > 1 && (
+          <label className="inline-flex">
+            <span className="sr-only">Assign to</span>
+            <select
+              value={ticket.assignee?.id ?? ""}
+              disabled={assign.isPending}
+              onChange={(e) => e.target.value && assign.mutate(e.target.value)}
+              className="min-h-11 rounded-full border border-control bg-card px-3.5 text-sm font-semibold text-ink focus:border-brand-700 focus:outline-none"
+            >
+              <option value="">{ticket.assignee ? "Reassign…" : "Assign to…"}</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.role === "admin" ? " (admin)" : ""} · {p.open} open
+                </option>
+              ))}
+            </select>
+          </label>
         )}
         {ticket.status !== "IN_PROGRESS" && (
           <Button variant="outline" onClick={() => start.mutate()} disabled={start.isPending}>
             <Play /> Start work
+          </Button>
+        )}
+        {ticket.status !== "WAITING_ON_USER" && (
+          <Button variant="outline" onClick={() => waiting.mutate()} disabled={waiting.isPending}>
+            <Hourglass /> Waiting on user
           </Button>
         )}
         {!resolving && (

@@ -9,6 +9,8 @@ export { TicketBoard } from "./durable/ticket-board";
 export { TriageAgent } from "./agents/triage-agent";
 export { TicketWorkflow } from "./workflows/ticket-workflow";
 export { AccessRequestWorkflow } from "./workflows/access-workflow";
+export { KbReindexWorkflow } from "./workflows/kb-reindex-workflow";
+export { KbGapAgent } from "./agents/kb-gap-agent";
 export { KnowledgeAgent } from "./agents/specialists/knowledge-agent";
 export { PingAgent } from "./agents/specialists/ping-agent";
 export { TicketAgent } from "./agents/specialists/ticket-agent";

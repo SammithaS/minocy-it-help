@@ -26,19 +26,23 @@
     "bindings": [
       { "name": "SUPPORT_AGENT", "class_name": "SupportAgent" },
       { "name": "TICKET_BOARD", "class_name": "TicketBoard" },
-      { "name": "TRIAGE_AGENT", "class_name": "TriageAgent" }
+      { "name": "TRIAGE_AGENT", "class_name": "TriageAgent" },
+      { "name": "KB_GAP_AGENT", "class_name": "KbGapAgent" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["SupportAgent"] },
     { "tag": "v2", "new_sqlite_classes": ["TicketBoard"] },
-    { "tag": "v3", "new_sqlite_classes": ["TriageAgent"] }
+    { "tag": "v3", "new_sqlite_classes": ["TriageAgent"] },
+    { "tag": "v4", "new_sqlite_classes": ["KbGapAgent"] }
   ],
   // Durable ticket lifecycle: notify → SLA timers → wait for resolution → confirm → close.
   "workflows": [
     { "name": "ticket-workflow", "binding": "TICKET_WORKFLOW", "class_name": "TicketWorkflow" },
     // Access request: manager approves by signed email link → mock provisioning → notify.
-    { "name": "access-request-workflow", "binding": "ACCESS_WORKFLOW", "class_name": "AccessRequestWorkflow" }
+    { "name": "access-request-workflow", "binding": "ACCESS_WORKFLOW", "class_name": "AccessRequestWorkflow" },
+    // KB editor saves and approved proposals: embed → Vectorize → D1 (article, steps, FTS).
+    { "name": "kb-reindex-workflow", "binding": "KB_REINDEX_WORKFLOW", "class_name": "KbReindexWorkflow" }
   ],
   // Cloudflare Email Service: team mailboxes must be verified destination addresses (free).
   "send_email": [{ "name": "EMAIL" }],

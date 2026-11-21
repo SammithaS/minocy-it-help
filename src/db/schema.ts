@@ -167,8 +167,62 @@ export const kbArticles = sqliteTable("kb_articles", {
   action: text("action"),
   body: text("body").notNull(),
   contentHash: text("content_hash").notNull(),
+  /** "file" = kb/*.md via `pnpm kb:ingest`; "console" = edited in the KB editor (ingest leaves it alone unless --force). */
+  managedBy: text("managed_by", { enum: ["file", "console"] }).notNull().default("file"),
   updatedAt: updatedAt(),
 });
+
+export const KB_ACTIONS = ["troubleshoot", "how_to", "password_reset", "access_request"] as const;
+
+/** One saved edit of an article (editor or approved proposal), applied by KbReindexWorkflow. */
+export const kbRevisions = sqliteTable(
+  "kb_revisions",
+  {
+    id: id(),
+    articleId: text("article_id").notNull(),
+    title: text("title").notNull(),
+    category: text("category").notNull(),
+    tags: text("tags", { mode: "json" }).$type<string[]>().notNull(),
+    os: text("os", { mode: "json" }).$type<string[]>().notNull(),
+    ticketCategory: text("ticket_category").notNull(),
+    priority: text("priority", { enum: PRIORITIES }).notNull(),
+    action: text("action", { enum: KB_ACTIONS }).notNull(),
+    /** Markdown body ("# Title" + the four sections), placeholders allowed. */
+    body: text("body").notNull(),
+    status: text("status", { enum: ["pending", "indexing", "live", "failed", "superseded"] }).notNull().default("pending"),
+    error: text("error"),
+    authorId: text("author_id"),
+    source: text("source", { enum: ["editor", "proposal"] }).notNull(),
+    proposalId: text("proposal_id"),
+    createdAt: createdAt(),
+    appliedAt: integer("applied_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("kb_revisions_article_idx").on(t.articleId, t.createdAt)],
+);
+
+/** Knowledge-gap agent's suggestion from a resolved ticket; an admin approves (→ revision) or rejects. */
+export const kbProposals = sqliteTable(
+  "kb_proposals",
+  {
+    id: id(),
+    ticketId: text("ticket_id").references(() => tickets.id, { onDelete: "set null" }),
+    /** Existing article to update, or the new id for kind = "new". */
+    articleId: text("article_id").notNull(),
+    kind: text("kind", { enum: ["update", "new"] }).notNull(),
+    title: text("title").notNull(),
+    rationale: text("rationale").notNull(),
+    /** Full proposed markdown body. */
+    body: text("body").notNull(),
+    /** For new articles: category, tags, os, ticket_category, priority, action. */
+    meta: text("meta", { mode: "json" }).$type<Record<string, unknown>>(),
+    status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
+    decidedBy: text("decided_by"),
+    decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+    revisionId: text("revision_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("kb_proposals_status_idx").on(t.status, t.createdAt)],
+);
 
 export const kbSteps = sqliteTable(
   "kb_steps",
@@ -237,6 +291,8 @@ export const tickets = sqliteTable(
     closedAt: integer("closed_at", { mode: "timestamp_ms" }),
     csat: integer("csat"),
     workflowInstanceId: text("workflow_instance_id"),
+    /** Why the assistant handed over (chat tickets), or "portal" / "email" — for analytics. */
+    escalationReason: text("escalation_reason"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -436,7 +492,8 @@ export const agentRuns = sqliteTable(
     agent: text("agent").notNull(), // knowledge | ticket | access | triage | kb_gap | supervisor
     routeMethod: text("route_method", { enum: ["rules", "llm", "workflow"] }).notNull(),
     reason: text("reason"),
-    status: text("status", { enum: ["completed", "error", "aborted", "interrupted", "skipped"] }).notNull(),
+    /** "fallback" rows record a model fallback (Gemini → Workers AI) during that agent's call. */
+    status: text("status", { enum: ["completed", "error", "aborted", "interrupted", "skipped", "fallback"] }).notNull(),
     summary: text("summary"),
     error: text("error"),
     durationMs: integer("duration_ms"),

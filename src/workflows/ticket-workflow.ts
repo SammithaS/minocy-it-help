@@ -11,6 +11,7 @@
  */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { getAgentByName, type Agent } from "agents";
+import type { KbGapAgent } from "../agents/kb-gap-agent";
 import type { TriageAgent, TriageResult } from "../agents/triage-agent";
 import * as msg from "../email/messages";
 import { sendEmail } from "../email/send";
@@ -138,6 +139,21 @@ export class TicketWorkflow extends WorkflowEntrypoint<AppEnv, TicketWorkflowPar
         const c = (await loadTicketContext(env, ticketId))!;
         return (await sendEmail(env, await msg.resolvedConfirm(env, c, resolved.note, confirmDays))).status;
       });
+
+      // Knowledge-gap agent (back-office): could the KB have prevented this ticket? Proposal only;
+      // never blocks the lifecycle. First resolution only.
+      if (round === 1) {
+        await step.do("kb-gap", { retries: { limit: 1, delay: "15 seconds" }, timeout: "3 minutes" }, async () => {
+          try {
+            const ns = env.KB_GAP_AGENT as unknown as DurableObjectNamespace<Agent<AppEnv>>;
+            const agent = (await getAgentByName(ns, "kb-gap")) as unknown as DurableObjectStub<KbGapAgent>;
+            return (await agent.review(ticketId, resolved.note)).status;
+          } catch (e) {
+            console.warn("[workflow] kb-gap failed:", e instanceof Error ? e.message : e);
+            return "skipped";
+          }
+        });
+      }
 
       let answer: ConfirmedPayload = { answer: "yes" };
       try {

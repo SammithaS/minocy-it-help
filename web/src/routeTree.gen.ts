@@ -18,10 +18,14 @@ import { Route as AppArticlesIdRouteImport } from './routes/_app/articles/$id'
 import { Route as AppChatIndexRouteImport } from './routes/_app/chat/index'
 import { Route as AppChatSessionIdRouteImport } from './routes/_app/chat/$sessionId'
 import { Route as AppConsoleIndexRouteImport } from './routes/_app/console/index'
+import { Route as AppConsoleAnalyticsRouteImport } from './routes/_app/console/analytics'
 import { Route as AppConsoleOutboxRouteImport } from './routes/_app/console/outbox'
 import { Route as AppConsoleSettingsRouteImport } from './routes/_app/console/settings'
 import { Route as AppTicketsIndexRouteImport } from './routes/_app/tickets/index'
 import { Route as AppTicketsNumberRouteImport } from './routes/_app/tickets/$number'
+import { Route as AppConsoleKnowledgeIndexRouteImport } from './routes/_app/console/knowledge/index'
+import { Route as AppConsoleKnowledgeIdRouteImport } from './routes/_app/console/knowledge/$id'
+import { Route as AppConsoleKnowledgeProposalsIdRouteImport } from './routes/_app/console/knowledge/proposals.$id'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -67,6 +71,11 @@ const AppConsoleIndexRoute = AppConsoleIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppConsoleRoute,
 } as any)
+const AppConsoleAnalyticsRoute = AppConsoleAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AppConsoleRoute,
+} as any)
 const AppConsoleOutboxRoute = AppConsoleOutboxRouteImport.update({
   id: '/outbox',
   path: '/outbox',
@@ -87,6 +96,23 @@ const AppTicketsNumberRoute = AppTicketsNumberRouteImport.update({
   path: '/tickets/$number',
   getParentRoute: () => AppRoute,
 } as any)
+const AppConsoleKnowledgeIndexRoute =
+  AppConsoleKnowledgeIndexRouteImport.update({
+    id: '/knowledge/',
+    path: '/knowledge/',
+    getParentRoute: () => AppConsoleRoute,
+  } as any)
+const AppConsoleKnowledgeIdRoute = AppConsoleKnowledgeIdRouteImport.update({
+  id: '/knowledge/$id',
+  path: '/knowledge/$id',
+  getParentRoute: () => AppConsoleRoute,
+} as any)
+const AppConsoleKnowledgeProposalsIdRoute =
+  AppConsoleKnowledgeProposalsIdRouteImport.update({
+    id: '/knowledge/proposals/$id',
+    path: '/knowledge/proposals/$id',
+    getParentRoute: () => AppConsoleRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -94,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/console': typeof AppConsoleRouteWithChildren
   '/articles/$id': typeof AppArticlesIdRoute
   '/chat/$sessionId': typeof AppChatSessionIdRoute
+  '/console/analytics': typeof AppConsoleAnalyticsRoute
   '/console/outbox': typeof AppConsoleOutboxRoute
   '/console/settings': typeof AppConsoleSettingsRoute
   '/tickets/$number': typeof AppTicketsNumberRoute
@@ -101,12 +128,16 @@ export interface FileRoutesByFullPath {
   '/chat/': typeof AppChatIndexRoute
   '/console/': typeof AppConsoleIndexRoute
   '/tickets/': typeof AppTicketsIndexRoute
+  '/console/knowledge/$id': typeof AppConsoleKnowledgeIdRoute
+  '/console/knowledge/': typeof AppConsoleKnowledgeIndexRoute
+  '/console/knowledge/proposals/$id': typeof AppConsoleKnowledgeProposalsIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/': typeof AppIndexRoute
   '/articles/$id': typeof AppArticlesIdRoute
   '/chat/$sessionId': typeof AppChatSessionIdRoute
+  '/console/analytics': typeof AppConsoleAnalyticsRoute
   '/console/outbox': typeof AppConsoleOutboxRoute
   '/console/settings': typeof AppConsoleSettingsRoute
   '/tickets/$number': typeof AppTicketsNumberRoute
@@ -114,6 +145,9 @@ export interface FileRoutesByTo {
   '/chat': typeof AppChatIndexRoute
   '/console': typeof AppConsoleIndexRoute
   '/tickets': typeof AppTicketsIndexRoute
+  '/console/knowledge/$id': typeof AppConsoleKnowledgeIdRoute
+  '/console/knowledge': typeof AppConsoleKnowledgeIndexRoute
+  '/console/knowledge/proposals/$id': typeof AppConsoleKnowledgeProposalsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -123,6 +157,7 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/_app/articles/$id': typeof AppArticlesIdRoute
   '/_app/chat/$sessionId': typeof AppChatSessionIdRoute
+  '/_app/console/analytics': typeof AppConsoleAnalyticsRoute
   '/_app/console/outbox': typeof AppConsoleOutboxRoute
   '/_app/console/settings': typeof AppConsoleSettingsRoute
   '/_app/tickets/$number': typeof AppTicketsNumberRoute
@@ -130,6 +165,9 @@ export interface FileRoutesById {
   '/_app/chat/': typeof AppChatIndexRoute
   '/_app/console/': typeof AppConsoleIndexRoute
   '/_app/tickets/': typeof AppTicketsIndexRoute
+  '/_app/console/knowledge/$id': typeof AppConsoleKnowledgeIdRoute
+  '/_app/console/knowledge/': typeof AppConsoleKnowledgeIndexRoute
+  '/_app/console/knowledge/proposals/$id': typeof AppConsoleKnowledgeProposalsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -139,6 +177,7 @@ export interface FileRouteTypes {
     | '/console'
     | '/articles/$id'
     | '/chat/$sessionId'
+    | '/console/analytics'
     | '/console/outbox'
     | '/console/settings'
     | '/tickets/$number'
@@ -146,12 +185,16 @@ export interface FileRouteTypes {
     | '/chat/'
     | '/console/'
     | '/tickets/'
+    | '/console/knowledge/$id'
+    | '/console/knowledge/'
+    | '/console/knowledge/proposals/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
     | '/'
     | '/articles/$id'
     | '/chat/$sessionId'
+    | '/console/analytics'
     | '/console/outbox'
     | '/console/settings'
     | '/tickets/$number'
@@ -159,6 +202,9 @@ export interface FileRouteTypes {
     | '/chat'
     | '/console'
     | '/tickets'
+    | '/console/knowledge/$id'
+    | '/console/knowledge'
+    | '/console/knowledge/proposals/$id'
   id:
     | '__root__'
     | '/_app'
@@ -167,6 +213,7 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/articles/$id'
     | '/_app/chat/$sessionId'
+    | '/_app/console/analytics'
     | '/_app/console/outbox'
     | '/_app/console/settings'
     | '/_app/tickets/$number'
@@ -174,6 +221,9 @@ export interface FileRouteTypes {
     | '/_app/chat/'
     | '/_app/console/'
     | '/_app/tickets/'
+    | '/_app/console/knowledge/$id'
+    | '/_app/console/knowledge/'
+    | '/_app/console/knowledge/proposals/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -246,6 +296,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppConsoleIndexRouteImport
       parentRoute: typeof AppConsoleRoute
     }
+    '/_app/console/analytics': {
+      id: '/_app/console/analytics'
+      path: '/analytics'
+      fullPath: '/console/analytics'
+      preLoaderRoute: typeof AppConsoleAnalyticsRouteImport
+      parentRoute: typeof AppConsoleRoute
+    }
     '/_app/console/outbox': {
       id: '/_app/console/outbox'
       path: '/outbox'
@@ -274,19 +331,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTicketsNumberRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/console/knowledge/': {
+      id: '/_app/console/knowledge/'
+      path: '/knowledge'
+      fullPath: '/console/knowledge/'
+      preLoaderRoute: typeof AppConsoleKnowledgeIndexRouteImport
+      parentRoute: typeof AppConsoleRoute
+    }
+    '/_app/console/knowledge/$id': {
+      id: '/_app/console/knowledge/$id'
+      path: '/knowledge/$id'
+      fullPath: '/console/knowledge/$id'
+      preLoaderRoute: typeof AppConsoleKnowledgeIdRouteImport
+      parentRoute: typeof AppConsoleRoute
+    }
+    '/_app/console/knowledge/proposals/$id': {
+      id: '/_app/console/knowledge/proposals/$id'
+      path: '/knowledge/proposals/$id'
+      fullPath: '/console/knowledge/proposals/$id'
+      preLoaderRoute: typeof AppConsoleKnowledgeProposalsIdRouteImport
+      parentRoute: typeof AppConsoleRoute
+    }
   }
 }
 
 interface AppConsoleRouteChildren {
+  AppConsoleAnalyticsRoute: typeof AppConsoleAnalyticsRoute
   AppConsoleOutboxRoute: typeof AppConsoleOutboxRoute
   AppConsoleSettingsRoute: typeof AppConsoleSettingsRoute
   AppConsoleIndexRoute: typeof AppConsoleIndexRoute
+  AppConsoleKnowledgeIdRoute: typeof AppConsoleKnowledgeIdRoute
+  AppConsoleKnowledgeIndexRoute: typeof AppConsoleKnowledgeIndexRoute
+  AppConsoleKnowledgeProposalsIdRoute: typeof AppConsoleKnowledgeProposalsIdRoute
 }
 
 const AppConsoleRouteChildren: AppConsoleRouteChildren = {
+  AppConsoleAnalyticsRoute: AppConsoleAnalyticsRoute,
   AppConsoleOutboxRoute: AppConsoleOutboxRoute,
   AppConsoleSettingsRoute: AppConsoleSettingsRoute,
   AppConsoleIndexRoute: AppConsoleIndexRoute,
+  AppConsoleKnowledgeIdRoute: AppConsoleKnowledgeIdRoute,
+  AppConsoleKnowledgeIndexRoute: AppConsoleKnowledgeIndexRoute,
+  AppConsoleKnowledgeProposalsIdRoute: AppConsoleKnowledgeProposalsIdRoute,
 }
 
 const AppConsoleRouteWithChildren = AppConsoleRoute._addFileChildren(

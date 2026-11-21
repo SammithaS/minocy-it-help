@@ -110,6 +110,7 @@ export function buildTools(ctx: ToolContext) {
           category: d.category as never,
           priority: d.priority,
           source: "CHAT",
+          escalationReason: s.escalationReason,
           sessionId: ctx.sessionId,
           kbArticleId: d.kbArticleId,
           stepsTried: d.stepsTried,

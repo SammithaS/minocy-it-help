@@ -65,13 +65,13 @@ export function geminiGatewayFetch(env: AppEnv, gatewayId: string, fallbackModel
  * limit) or doesn't start streaming within CONNECT_TIMEOUT_MS is skipped; once a stream has started
  * it is the answer.
  */
-export function withFallback(models: LanguageModelV4[]): LanguageModelV4 {
+export function withFallback(models: LanguageModelV4[], onFallback?: (from: LanguageModelV4, error: unknown) => void | Promise<void>): LanguageModelV4 {
   const [primary] = models;
   if (!primary || models.length === 1) return primary!;
 
   async function attempt<T>(run: (m: LanguageModelV4) => PromiseLike<T>, signal?: AbortSignal): Promise<T> {
     let lastError: unknown;
-    for (const m of models) {
+    for (const [i, m] of models.entries()) {
       if (signal?.aborted) throw signal.reason;
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -85,6 +85,13 @@ export function withFallback(models: LanguageModelV4[]): LanguageModelV4 {
         if (signal?.aborted) throw e;
         lastError = e;
         console.warn(`[llm] ${m.provider}/${m.modelId} failed, trying next:`, e instanceof Error ? e.message : e);
+        if (i < models.length - 1) {
+          try {
+            await onFallback?.(m, e);
+          } catch {
+            // Analytics only; never fail the call.
+          }
+        }
       } finally {
         clearTimeout(timer);
       }
@@ -115,5 +122,14 @@ export function chatModel(env: AppEnv, metadata: Record<string, string> = {}): L
     }),
   });
   const gemini = google(env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL) as unknown as LanguageModelV4;
-  return withFallback([gemini, workersAi]) as unknown as LanguageModel;
+  // Each fallback is an agent_runs row (status "fallback") so analytics can show fallbacks per agent.
+  const recordFallback = async (from: LanguageModelV4, error: unknown) => {
+    await env.DB.prepare(
+      `INSERT INTO agent_runs (id, session_id, agent, route_method, reason, status, summary, error, created_at)
+       VALUES (?, ?, ?, 'llm', 'model fallback', 'fallback', ?, ?, ?)`,
+    )
+      .bind(crypto.randomUUID(), metadata.session ?? null, metadata.agent ?? "unknown", `${from.modelId} → ${WORKERS_AI_FALLBACK_MODEL}`, String(error instanceof Error ? error.message : error).slice(0, 300), Date.now())
+      .run();
+  };
+  return withFallback([gemini, workersAi], recordFallback) as unknown as LanguageModel;
 }

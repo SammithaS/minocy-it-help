@@ -39,6 +39,14 @@ import {
 } from "./state";
 import { buildTools, type ToolName } from "./tools";
 
+export interface TranscriptItem {
+  role: "user" | "assistant" | "system";
+  kind: "text" | "handoff" | "step" | "card";
+  text: string;
+  outcome?: string;
+  note?: string;
+}
+
 interface SessionOwner {
   user_id: string;
   name: string;
@@ -535,6 +543,40 @@ export class SupportAgent extends AIChatAgent<AppEnv, SupportState> {
       not_found: "This reset is no longer active.",
     }[r.reason];
     return { ok: false, error, final: r.reason !== "wrong" };
+  }
+
+  /**
+   * The conversation for IT staff on the ticket page (DO RPC from the console API, which checks access).
+   * Messages that look like they contain a password or code are hidden.
+   */
+  async transcript(): Promise<TranscriptItem[]> {
+    const steps = this.state.steps;
+    return (this.messages as unknown as UiMessage[]).flatMap((m): TranscriptItem[] => {
+      if (m.role === "user") {
+        const text = m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join(" ").trim();
+        if (!text) return [];
+        return [{ role: "user", kind: "text", text: detect.secret(text) ? "[hidden — looked like a password or code]" : text }];
+      }
+      if (m.role !== "assistant") return [];
+      return m.parts.flatMap((p): TranscriptItem[] => {
+        if (p.type === "text" && p.text?.trim()) return [{ role: "assistant", kind: "text", text: p.text.trim() }];
+        if (p.type === "data-handoff") {
+          const d = (p as unknown as { data: HandoffEvent }).data;
+          return [{ role: "system", kind: "handoff", text: `${d.label} · ${d.summary} (${d.method === "rules" ? "rule" : "AI"}: ${d.reason})` }];
+        }
+        if (p.type === `tool-${STEP_TOOL}`) {
+          const n = Number((p.input as { stepNumber?: number } | undefined)?.stepNumber);
+          const out = p.output as { outcome?: string; note?: string } | undefined;
+          return [{ role: "system", kind: "step", text: `Step ${n}: ${steps[n - 1]?.text ?? "(guide step)"}`, outcome: out?.outcome ?? "no answer", note: out?.note }];
+        }
+        if (p.type.startsWith("tool-") && p.state === "output-available") {
+          const out = (p.output ?? {}) as Record<string, unknown>;
+          if (typeof out.number === "string") return [{ role: "system", kind: "card", text: `${p.type.slice(5)} → ${out.number}` }];
+        }
+        if (p.type === "data-followup") return [{ role: "system", kind: "card", text: "24 h follow-up sent" }];
+        return [];
+      });
+    });
   }
 
   /** Spike/diagnostics: proves a sub-agent hand-off round-trips (used by tests and /api/health/subagents). */

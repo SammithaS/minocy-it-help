@@ -3,6 +3,7 @@ import { logger } from "hono/logger";
 import { accessRoutes } from "./access";
 import { authRoutes } from "./auth";
 import { chatRoutes } from "./chats";
+import { consoleAdminRoutes } from "./console-admin";
 import { requireRole, sessionMiddleware, type HonoEnv } from "./context";
 import { kbRoutes } from "./kb";
 import { publicRoutes } from "./public";
@@ -29,6 +30,7 @@ export const api = new Hono<HonoEnv>()
   .route("/", consoleRoutes)
   .route("/", accessRoutes)
   .route("/", chatRoutes)
+  .route("/", consoleAdminRoutes)
   .notFound((c) => c.json({ error: "not_found" }, 404))
   .onError((err, c) => {
     console.error(err);

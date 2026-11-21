@@ -1,7 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
+  BarChart3,
   BookOpen,
+  Library,
   Headset,
   Home,
   LayoutDashboard,
@@ -16,6 +18,7 @@ import {
 import { isStaff, type Me } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { toggleTheme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 interface NavItem {
   to: string;
@@ -33,9 +36,11 @@ export function navItemsFor(me: Me): NavItem[] {
   if (!isStaff(me.user.role)) return employee;
   const staff: NavItem[] = [
     { to: "/console", label: "Console", icon: LayoutDashboard },
+    { to: "/console/analytics", label: "Analytics", icon: BarChart3 },
     { to: "/", label: "Portal", icon: Headset },
   ];
   if (me.user.role === "admin") {
+    staff.splice(1, 0, { to: "/console/knowledge", label: "KB", icon: Library });
     staff.push({ to: "/console/outbox", label: "Outbox", icon: Mail });
     staff.push({ to: "/console/settings", label: "Settings", icon: Settings });
   }
@@ -43,7 +48,7 @@ export function navItemsFor(me: Me): NavItem[] {
 }
 
 const pillBase =
-  "flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold text-muted transition-colors hover:text-ink";
+  "flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-semibold whitespace-nowrap text-muted transition-colors hover:text-ink lg:px-4";
 const pillActive = "bg-brand-50 text-brand-800 hover:text-brand-800";
 
 function initials(name: string) {
@@ -62,6 +67,11 @@ export function TopNav({ me }: { me: Me }) {
 
   async function signOut() {
     await authClient.signOut();
+    try {
+      localStorage.removeItem("askit.dock"); // pre-Phase 8 shared key
+    } catch {
+      // storage blocked: nothing to clear
+    }
     qc.setQueryData(["me"], null);
     await navigate({ to: "/login" });
   }
@@ -74,9 +84,9 @@ export function TopNav({ me }: { me: Me }) {
             <span className="grid size-9 place-items-center rounded-full bg-brand-700 text-on-brand">
               <Headset className="size-5" strokeWidth={2} />
             </span>
-            <span className="text-[15px]">Minocy IT Help</span>
+            <span className={cn("text-[15px] whitespace-nowrap", items.length > 4 && "hidden xl:inline")}>Minocy IT Help</span>
           </Link>
-          <nav className="ml-4 hidden items-center gap-1 md:flex" aria-label="Main">
+          <nav className="ml-2 hidden items-center gap-0.5 md:flex lg:ml-4 lg:gap-1" aria-label="Main">
             {items.map((item) => (
               <Link
                 key={item.to}

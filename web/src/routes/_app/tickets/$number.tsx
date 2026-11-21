@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Check, Lock, MessageSquare, RotateCcw, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { InlineMd } from "@/components/inline-md";
+import { TranscriptPanel, TriageCard } from "@/components/tickets/staff-panels";
 import { ConfirmCard, StaffActions } from "@/components/tickets/ticket-actions";
 import { SlaChip } from "@/components/tickets/ticket-row";
 import { PriorityBadge, StatusBadge } from "@/components/ui/badge";
@@ -37,6 +38,7 @@ const EVENT_LABEL: Record<string, string> = {
   escalated: "SLA breached — escalated to IT admin",
   triaged: "Triaged by the Triage agent",
   confirmation: "Employee answered “Did this fix it?”",
+  assigned_by: "Assigned",
   sla_breached: "SLA breached",
 };
 
@@ -97,6 +99,7 @@ function TicketPage() {
       </header>
 
       {staff ? <StaffActions ticket={t} meId={me.user.id} /> : <ConfirmCard ticket={t} />}
+      {staff && <TriageCard comments={comments} />}
 
       <Card className="space-y-4">
         <p className="whitespace-pre-line text-[15px] leading-relaxed">{t.description}</p>
@@ -129,6 +132,8 @@ function TicketPage() {
           )}
         </div>
       </Card>
+
+      {staff && t.sessionId && <TranscriptPanel number={t.number} />}
 
       <section aria-label="Activity" className="space-y-3">
         <h2 className="font-bold">Activity</h2>

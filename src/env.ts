@@ -15,6 +15,8 @@ export interface Secrets {
   ACCESS_APPROVAL_DAYS?: string;
   /** Hours after the assistant resolves a problem before it checks in (default 24). */
   FOLLOW_UP_HOURS?: string;
+  /** Knowledge-gap agent runs per 24 h (default 50). */
+  KB_GAP_DAILY_BUDGET?: string;
 }
 
 export type AppEnv = Env & Secrets;

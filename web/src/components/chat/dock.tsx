@@ -22,22 +22,23 @@ export const useDock = () => {
   return ctx;
 };
 
-const KEY = "askit.dock";
+/** Per user: a shared browser must never reopen someone else's conversation. */
+const keyFor = (userId: string) => `askit.dock.${userId}`;
 interface Persisted {
   sessionId: string | null;
   open: boolean;
 }
-function load(): Persisted {
+function load(key: string): Persisted {
   try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? "null") as Persisted | null;
+    const v = JSON.parse(localStorage.getItem(key) ?? "null") as Persisted | null;
     return v && typeof v === "object" ? { sessionId: v.sessionId ?? null, open: !!v.open } : { sessionId: null, open: false };
   } catch {
     return { sessionId: null, open: false };
   }
 }
-function save(v: Persisted) {
+function save(key: string, v: Persisted) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(v));
+    localStorage.setItem(key, JSON.stringify(v));
   } catch {
     // Private mode / blocked storage: the dock still works, it just won't survive a reload.
   }
@@ -46,14 +47,16 @@ function save(v: Persisted) {
 /** Pages where the dock would duplicate or get in the way (the full-page chat, the IT console). */
 const HIDDEN_ON = [/^\/chat(\/|$)/, /^\/console(\/|$)/];
 
-export function DockProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<Persisted>(load);
+export function DockProvider({ children, userId, staff }: { children: ReactNode; userId: string; staff: boolean }) {
+  const key = keyFor(userId);
+  const [state, setState] = useState<Persisted>(() => load(key));
   const [pending, setPending] = useState<string | undefined>();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const hidden = HIDDEN_ON.some((re) => re.test(pathname));
+  // IT staff see the dock only on the portal home (their "Portal" view), not over console or ticket pages.
+  const hidden = HIDDEN_ON.some((re) => re.test(pathname)) || (staff && pathname !== "/");
 
-  useEffect(() => save(state), [state]);
+  useEffect(() => save(key, state), [key, state]);
 
   const open = useCallback((message?: string) => {
     const text = message?.trim();

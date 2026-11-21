@@ -174,14 +174,47 @@ export const consoleRoutes = new Hono<HonoEnv>()
     "/console/tickets",
     zValidator(
       "query",
-      z.object({ scope: z.enum(["mine", "all"]).default("mine"), status: z.enum(["open", "all"]).default("open"), team: z.string().optional() }),
+      z.object({
+        scope: z.enum(["mine", "all"]).default("mine"),
+        status: z.enum(["open", "all", "NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_ON_USER", "RESOLVED", "CLOSED"]).default("open"),
+        team: z.string().optional(),
+        priority: z.enum(PRIORITIES).optional(),
+        assigned: z.enum(["any", "me", "unassigned"]).default("any"),
+        sla: z.enum(["any", "overdue", "soon"]).default("any"),
+        q: z.string().trim().max(100).optional(),
+      }),
     ),
     async (c) => {
       const user = c.get("user")!;
-      const { scope, status, team } = c.req.valid("query");
+      const { scope, status, team, priority, assigned, sla, q } = c.req.valid("query");
       const where: string[] = [];
       const binds: unknown[] = [];
+      const now = Date.now();
       if (status === "open") where.push("t.status NOT IN ('RESOLVED', 'CLOSED')");
+      else if (status !== "all") {
+        where.push("t.status = ?");
+        binds.push(status);
+      }
+      if (priority) {
+        where.push("t.priority = ?");
+        binds.push(priority);
+      }
+      if (assigned === "me") {
+        where.push("t.assignee_id = ?");
+        binds.push(user.id);
+      } else if (assigned === "unassigned") where.push("t.assignee_id IS NULL");
+      if (sla === "overdue") {
+        where.push("t.status NOT IN ('RESOLVED','CLOSED') AND (t.sla_breached = 1 OR t.sla_due_at < ?)");
+        binds.push(now);
+      } else if (sla === "soon") {
+        where.push("t.status NOT IN ('RESOLVED','CLOSED') AND t.sla_due_at BETWEEN ? AND ?");
+        binds.push(now, now + 2 * 3_600_000);
+      }
+      if (q) {
+        where.push("(t.number LIKE ? OR t.title LIKE ? OR r.name LIKE ?)");
+        const like = `%${q.replace(/[%_]/g, "")}%`;
+        binds.push(like, like, like);
+      }
       if (team) {
         where.push("t.team_id = ?");
         binds.push(team);
@@ -205,6 +238,29 @@ export const consoleRoutes = new Hono<HonoEnv>()
       return c.json({ tickets: results.map(serializeTicket), teams: teams.results });
     },
   )
+  // The chat that produced this ticket, for the IT engineer (passwords/codes hidden).
+  .get("/console/tickets/:number/transcript", numberParam, async (c) => {
+    const user = c.get("user")!;
+    const t = await c.env.DB.prepare("SELECT id, team_id, session_id FROM tickets WHERE number = ?")
+      .bind(c.req.valid("param").number)
+      .first<{ id: string; team_id: string | null; session_id: string | null }>();
+    if (!t || !(await canWork(c.env.DB, user, t.team_id))) return c.json({ error: "not_found" }, 404);
+    if (!t.session_id) return c.json({ transcript: null });
+    const stub = c.env.SUPPORT_AGENT.getByName(t.session_id) as unknown as { transcript(): Promise<unknown[]> };
+    return c.json({ transcript: await stub.transcript() });
+  })
+  // People who can take the ticket: members of its team (and admins).
+  .get("/console/tickets/:number/assignees", numberParam, async (c) => {
+    const t = await c.env.DB.prepare("SELECT team_id FROM tickets WHERE number = ?").bind(c.req.valid("param").number).first<{ team_id: string | null }>();
+    if (!t) return c.json({ error: "not_found" }, 404);
+    const { results } = await c.env.DB.prepare(
+      `SELECT u.id, u.name, u.role, (SELECT COUNT(*) FROM tickets x WHERE x.assignee_id = u.id AND x.status NOT IN ('RESOLVED','CLOSED')) AS open
+       FROM user u WHERE u.role = 'admin' OR u.id IN (SELECT user_id FROM team_members WHERE team_id = ?) ORDER BY u.role = 'admin', open, u.name`,
+    )
+      .bind(t.team_id ?? "")
+      .all<{ id: string; name: string; role: string; open: number }>();
+    return c.json({ assignees: results });
+  })
   // ── ticket actions (each also signals the ticket's workflow) ──
   .post(
     "/console/tickets/:number/assign",
@@ -215,7 +271,11 @@ export const consoleRoutes = new Hono<HonoEnv>()
       const t = await getTicketByNumber(c.env, c.req.valid("param").number);
       if (!t || !(await canWork(c.env.DB, user, t.team_id))) return c.json({ error: "not_found" }, 404);
       const assigneeId = c.req.valid("json").assigneeId ?? user.id;
-      const member = await c.env.DB.prepare("SELECT 1 FROM user WHERE id = ? AND role IN ('agent','admin')").bind(assigneeId).first();
+      const member = await c.env.DB.prepare(
+        "SELECT 1 FROM user u WHERE u.id = ? AND (u.role = 'admin' OR (u.role = 'agent' AND u.id IN (SELECT user_id FROM team_members WHERE team_id = ?)))",
+      )
+        .bind(assigneeId, t.team_id ?? "")
+        .first();
       if (!member) return c.json({ error: "invalid_assignee" }, 400);
       await assignTicket(c.env, t, assigneeId, user.id);
       return c.json({ ok: true });

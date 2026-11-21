@@ -21,6 +21,8 @@ export const newTicketSchema = z.object({
     .max(30)
     .default([]),
   device: z.string().max(200).nullish(),
+  /** Why it reached IT: the assistant's escalation reason for chat tickets, else "portal" / "email". */
+  escalationReason: z.string().max(40).nullish(),
 });
 export type NewTicket = z.input<typeof newTicketSchema>;
 
@@ -47,6 +49,7 @@ export interface TicketRow {
   closed_at: number | null;
   csat: number | null;
   workflow_instance_id: string | null;
+  escalation_reason: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -93,8 +96,8 @@ export async function createTicket(env: AppEnv, input: NewTicket, now = new Date
     db
       .prepare(
         `INSERT INTO tickets (id, number, requester_id, team_id, title, description, category, priority, status, source,
-           session_id, kb_article_id, steps_tried, device, sla_due_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'NEW', ?, ?, ?, ?, ?, ?, ?, ?)`,
+           session_id, kb_article_id, steps_tried, device, sla_due_at, escalation_reason, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'NEW', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id,
@@ -111,6 +114,7 @@ export async function createTicket(env: AppEnv, input: NewTicket, now = new Date
         JSON.stringify(t.stepsTried satisfies StepTried[]),
         t.device ?? null,
         slaDue.getTime(),
+        t.escalationReason ?? (t.source === "CHAT" ? "user_requested" : t.source.toLowerCase()),
         ts,
         ts,
       ),

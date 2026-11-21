@@ -13,3 +13,5 @@ IT_ADMIN_EMAIL=
 ACCESS_APPROVAL_DAYS=
 # Hours before the assistant checks in after fixing something (default 24)
 FOLLOW_UP_HOURS=
+# Knowledge-gap agent runs per 24 h (default 50)
+KB_GAP_DAILY_BUDGET=
