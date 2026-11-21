@@ -1,5 +1,5 @@
 /**
- * Ticket creation and lookups shared by the chat agent, the REST API and (Phase 5) inbound email.
+ * Ticket creation and lookups shared by the chat agent, the REST API and inbound email.
  */
 import { z } from "zod";
 import { PRIORITIES, SOURCES, type StepTried } from "../db/schema";

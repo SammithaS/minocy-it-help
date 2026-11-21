@@ -1,5 +1,5 @@
 /**
- * Organisation constants. Used by the seed script and (Phase 2) to fill KB placeholders
+ * Organisation constants. Used by the seed script and to fill KB placeholders
  * such as {{company}}, {{vpn_name}} or {{helpdesk_phone}}. All dummy data.
  */
 export const org = {

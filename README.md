@@ -102,7 +102,7 @@ Tools: `listMyTeamTickets` (status / priority / overdue / assigned-to-me filters
 
 ## Email
 
-`EMAIL_TRANSPORT=log` (default) renders every email and stores it in the admin **Outbox** (`/console/outbox`) — no domain or accounts needed. For real sending, set up a domain on Cloudflare (Email Routing + verified team mailboxes) and Resend, then set `EMAIL_TRANSPORT=live` (see README).
+`EMAIL_TRANSPORT=log` (default) renders every email and stores it in the admin **Outbox** (`/console/outbox`) — no domain or accounts needed. For real sending, set up a domain on Cloudflare (Email Routing + verified team mailboxes) and Resend, then set `EMAIL_TRANSPORT=live` (see [Deploy](#deploy)).
 
 Password-reset codes and set-password links are sent like any other email, but the Outbox keeps only their subject and recipient (admins mustn't read them); in `log` mode their text is printed in the `pnpm dev` terminal, like sign-in codes. Manager approval emails are normal Outbox entries — open one and click **Approve** to finish an access request locally.
 
@@ -111,6 +111,125 @@ Simulate inbound email locally:
 ```bash
 curl -X POST --data-binary @reply.eml "http://localhost:5173/cdn-cgi/handler/email?from=ananya.sharma@minocy.example&to=ticket%2BINC-1004@minocy.example"
 ```
+
+## Deploy
+
+Everything runs on Cloudflare's free plan (Workers, Durable Objects, Workflows, D1, Vectorize, Workers AI, AI Gateway, Email Routing); Gemini uses a free AI Studio key, and Resend's free tier is optional.
+
+### 0. Before you start
+
+- `pnpm exec wrangler login` (same account you use for `pnpm dev`; Vectorize + Workers AI already live there).
+- `pnpm typecheck && pnpm test && pnpm build` all pass.
+- Decide the URL. Without a domain the app is `https://minocy-it-help.<your-subdomain>.workers.dev`.
+
+### 1. D1 database
+
+```bash
+pnpm exec wrangler d1 create minocy-it-help
+```
+
+Copy the printed `database_id` into `wrangler.jsonc` → `d1_databases[0].database_id` (replacing the
+`00000000-…` placeholder), then apply the migrations to the remote database:
+
+```bash
+pnpm exec wrangler d1 migrations apply DB --remote
+```
+
+Org data (teams, routing rules, SLA policies, apps, managers, staff): edit `scripts/seed.ts` for your
+real people — or keep the demo data for a demo — then:
+
+```bash
+pnpm tsx scripts/seed.ts
+pnpm exec wrangler d1 execute DB --remote --file=.wrangler/seed.sql
+```
+
+Set `SEED_MAILBOX_TEMPLATE` (e.g. `you+it-{team}@gmail.com`) and `SEED_ADMIN_EMAIL` before generating
+so team mailboxes are addresses you can verify in step 5.
+
+### 2. Vectorize (once per account)
+
+Already done if you ran the local quick start — the dev setup uses the same remote index. Otherwise:
+
+```bash
+pnpm exec wrangler vectorize create it-kb --preset=@cf/baai/bge-base-en-v1.5
+for p in "category string" "section string" "os_windows boolean" "os_macos boolean" "os_linux boolean"; do
+  set -- $p; pnpm exec wrangler vectorize create-metadata-index it-kb --property-name=$1 --type=$2
+done
+```
+
+### 3. Knowledge base into the production D1
+
+Vectorize is shared with dev; the D1 rows (articles, steps, full-text index) must be written to the
+remote database too:
+
+```bash
+pnpm kb:ingest --remote --force
+```
+
+(`--remote` ingests locally — which also updates the Vectorize index that dev and production share —
+then copies the KB rows to the production D1 with `wrangler d1 execute --remote`. It overwrites the
+production KB, so run it before editing guides in production.) After deploying, edit guides in
+**Console → KB** — saves re-index through `KbReindexWorkflow` in production.
+
+### 4. Configuration and secrets
+
+In `wrangler.jsonc` → `vars`:
+
+| Var | Value |
+|---|---|
+| `APP_URL` | your production URL, e.g. `https://minocy-it-help.<subdomain>.workers.dev` (used for links, cookies and the MCP host check) |
+| `EMAIL_FROM` | a sender on your Email Routing domain (or keep the default with `EMAIL_TRANSPORT=log`) |
+| `EMAIL_TRANSPORT` | `log` (Outbox only — safe default) or `live` (see step 5) |
+| `INBOUND_DOMAIN` | the domain whose `help@` / `ticket+…@` addresses route to the Worker |
+
+Secrets (never in `wrangler.jsonc`):
+
+```bash
+pnpm exec wrangler secret put BETTER_AUTH_SECRET          # openssl rand -base64 48
+pnpm exec wrangler secret put GOOGLE_GENERATIVE_AI_API_KEY
+pnpm exec wrangler secret put RESEND_API_KEY              # optional: sign-in codes + employee mail
+pnpm exec wrangler secret put IT_ADMIN_EMAIL              # optional: escalations + digest go here
+```
+
+Optional tuning secrets/vars: `AI_GATEWAY_ID` (defaults to the auto-created `default` gateway),
+`GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, `TRIAGE_DAILY_BUDGET`, `KB_GAP_DAILY_BUDGET`,
+`ACCESS_APPROVAL_DAYS`, `FOLLOW_UP_HOURS`, `CONFIRM_TIMEOUT_DAYS`.
+
+**Sign-in needs email.** Without `RESEND_API_KEY`, one-time codes are only written to the Worker logs
+(`wrangler tail`). For anyone but you, set up Resend with a verified domain.
+
+### 5. Email (optional, needs a domain on Cloudflare)
+
+1. Add the domain to Cloudflare and enable **Email Routing**.
+2. Verify each team mailbox and the admin address as destination addresses (team/admin mail goes
+   through the `send_email` binding, which only delivers to verified addresses).
+3. Route `help@`, `it@`, `support@`, `helpdesk@` and the catch-all for `ticket+*@` to the Worker
+   (**Email Routing → Routes → Send to a Worker → minocy-it-help**).
+4. Verify the same domain in Resend for employee mail, then set `EMAIL_TRANSPORT=live`.
+
+### 6. Deploy
+
+```bash
+pnpm deploy          # typecheck → tests → build → wrangler deploy
+```
+
+`wrangler deploy` creates the Durable Object classes (migrations `v1`–`v4`), the three Workflows
+(`ticket-workflow`, `access-request-workflow`, `kb-reindex-workflow`) and the daily digest cron
+(`30 3 * * *` = 09:00 IST).
+
+### 7. Check it
+
+- `GET /api/health` → `{"ok":true}`.
+- Sign in as an admin, open **Console → Analytics** and **Console → KB**.
+- As an employee, ask "my wifi keeps dropping" → Knowledge agent chip + step 1.
+- Admins: `GET /api/health/subagents` proves supervisor → specialist hand-offs (facets) work in production.
+  If facets aren't available on your plan, run each specialist as its own Durable Object (same contract).
+- `pnpm exec wrangler tail` for logs; AI Gateway → Logs for model calls and fallbacks.
+
+### Rolling back
+
+`pnpm exec wrangler deployments list` and `pnpm exec wrangler rollback <id>`. D1 migrations are
+additive; restore data with D1 Time Travel (`wrangler d1 time-travel restore DB --timestamp=…`).
 
 ## Layout
 
@@ -128,7 +247,7 @@ web/src/             React 19 + TanStack Router/Query + Tailwind v4 ("Clear Sky"
 migrations/          D1 migrations (drizzle-kit)
 kb/                  20 knowledge base articles (markdown + frontmatter)
 scripts/             seed, check-kb, ingest-kb, search-kb, eval
-evals/               promptfoo suites + providers/
+evals/               promptfoo suites, providers/, RESULTS.md
 tests/               Vitest in the Workers pool        e2e/   Playwright
 ```
 

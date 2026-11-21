@@ -147,7 +147,7 @@ describe("Access agent logic", () => {
     expect(r).toMatchObject({ applicationId: "app-figma", method: "llm", justification: "Designing the onboarding flow" });
   });
 
-  it("asks which app without a model call when the message names nothing (e2e finding)", async () => {
+  it("asks which app without a model call when the message names nothing", async () => {
     const pick = vi.fn();
     const r = await resolveAccessRequest(E, { requesterId: "e1", userMessages: ["I need access to an app"] }, pick);
     expect(pick).not.toHaveBeenCalled();
